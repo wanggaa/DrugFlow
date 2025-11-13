@@ -25,6 +25,12 @@ wget https://github.com/gnina/gnina/releases/download/v1.1/gnina -O $CONDA_PREFI
 chmod +x $CONDA_PREFIX/bin/gnina
 ```
 
+for debug code, you may want to use debugpy
+'''bash
+pip uninstall dataclasses
+'''
+to uninstall dataclasses-0.6.dist-info/* which is for python3.6
+
 ### Docker Container
 
 A pre-built Docker container is available on [DockerHub](https://hub.docker.com/r/igashov/drugflow):
