@@ -6,3 +6,5 @@ notebooks/
 *DS_Store
 samples/
 crossdocked/
+examples/
+checkpoints/
