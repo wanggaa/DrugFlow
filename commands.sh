@@ -1,5 +1,5 @@
 # Generate molecules
-python src/generate.py \
+python -m debugpy --wait-for-client --listen 5678 src/generate.py \
   --protein examples/kras/kras.pdb \
   --ref_ligand examples/kras/kras_ref_ligand.sdf \
   --checkpoint checkpoints/drugflow.ckpt \
