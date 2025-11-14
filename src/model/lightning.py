@@ -1181,7 +1181,7 @@ class DrugFlow(pl.LightningModule):
 
     @torch.no_grad()
     def sample(self, data, n_samples, num_nodes=None, timesteps=None,
-               guide_log_prob=None, size_model=None, **kwargs):
+               guide_log_prob=None, size_model=None, scaffold_ligand=None, **kwargs):
 
         # TODO: move somewhere else (like collate_fn)
         data['pocket'] = Residues(**data['pocket'])
