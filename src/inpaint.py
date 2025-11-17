@@ -60,7 +60,7 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument('--protein', type=str, required=True, help="Input PDB file.")
     p.add_argument('--ref_ligand', type=str, required=True, help="SDF file with reference ligand used to define the pocket.")
-    p.add_argument('--scaffold_ligand',type=str, required=False, default=None, help="SDF file with scaffold ligand to condition the generation.")
+    p.add_argument('--scaffold_ligand',type=str, required=True, default=None, help="SDF file with scaffold ligand to condition the generation.")
     p.add_argument('--checkpoint', type=str, required=True, help="Model checkpoint file.")
     p.add_argument('--molecule_size', type=str, required=False, default=None, help="Maximum number of atoms in the sampled molecules. Can be a single number or a range, e.g. '15,20'. If None, size will be sampled.")
     p.add_argument('--output', type=str, required=False, default='samples.sdf', help="Output file.")
@@ -121,10 +121,8 @@ if __name__ == "__main__":
     # Preparing input
     pdb_model = PDBParser(QUIET=True).get_structure('', args.protein)[0]
     ref_mol = Chem.SDMolSupplier(str(args.ref_ligand))[0]
-    if args.scaffold_ligand is not None:
-        scaffold_mol = Chem.SDMolSupplier(str(args.scaffold_ligand))[0]
-        scaffold = prepare_ligand(scaffold_mol,atom_encoder,bond_encoder)
-        
+    scaffold_mol = Chem.SDMolSupplier(str(args.scaffold_ligand))[0]
+    
     ligand, pocket = process_raw_pair(
         pdb_model, ref_mol,
         dist_cutoff=args.pocket_distance_cutoff,
@@ -132,8 +130,12 @@ if __name__ == "__main__":
         compute_nerf_params=True,
         nma_input=args.protein if model.dynamics.add_nma_feat else None
     )
+    scaffold = prepare_ligand(scaffold_mol,atom_encoder,bond_encoder)
+        
     ligand['name'] = 'ligand'
-    dataset = [{'ligand': ligand, 'pocket': pocket} for _ in range(args.batch_size)]
+    scaffold['name'] = 'scaffold'
+    
+    dataset = [{'ligand': ligand, 'pocket': pocket, 'scaffold': scaffold} for _ in range(args.batch_size)]
     dataloader = DataLoader(
         dataset=dataset,
         batch_size=args.batch_size, 
@@ -159,11 +161,10 @@ if __name__ == "__main__":
                 new_data = {
                     'ligand': TensorDict(**data['ligand']).to(args.device),
                     'pocket': TensorDict(**data['pocket']).to(args.device),
+                    
                 }
                 
-                if args.scaffold_ligand:
-                    scaffold = TensorDict(**scaffold).to(args.device)
-                    
+                scaffold = TensorDict(**scaffold).to(args.device)
                 rdmols, rdpockets, _ = model.sample(
                     new_data,
                     n_samples=1,

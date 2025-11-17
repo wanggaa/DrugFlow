@@ -51,10 +51,14 @@ class ProcessedLigandPocketDataset(Dataset):
         return data
 
     @staticmethod
-    def collate_fn(batch_pairs, ligand_transform=None):
+    def collate_fn(batch_pairs, ligand_transform=None, use_scaffold=False):
 
         out = {}
-        for entity in ['ligand', 'pocket']:
+        column_list = ['ligand', 'pocket']
+        if use_scaffold:
+            column_list.append('scaffold')
+        
+        for entity in column_list:
             batch = [x[entity] for x in batch_pairs]
 
             if entity == 'ligand' and ligand_transform is not None:

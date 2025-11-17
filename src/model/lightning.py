@@ -1006,7 +1006,7 @@ class DrugFlow(pl.LightningModule):
         return zt_ligand, zt_pocket
 
     def simulate(self, ligand, pocket, timesteps, t_start, t_end=1.0,
-                 return_frames=1, guide_log_prob=None):
+                 return_frames=1, guide_log_prob=None, scaffold=None):
         """
         Take a version of the ligand and pocket (at any time step t_start) and
         simulate the generative process from t_start to t_end.
@@ -1202,6 +1202,9 @@ class DrugFlow(pl.LightningModule):
         batch = {"ligand": _ligand, "pocket": pocket}
         num_nodes = self.parse_num_nodes_spec(batch, spec=num_nodes, size_model=size_model)
 
+        if scaffold_ligand is not None:
+            scaffold_ligand.num_nodes = num_nodes
+
         # Sample from prior
         if pocket['x'].numel() > 0:
             ligand = self.init_ligand(num_nodes, pocket)
@@ -1228,7 +1231,8 @@ class DrugFlow(pl.LightningModule):
 
         out_tensors_ligand, out_tensors_pocket = self.simulate(
             ligand, pocket, timesteps, 0.0, 1.0,
-            guide_log_prob=guide_log_prob
+            guide_log_prob=guide_log_prob,
+            scaffold=scaffold_ligand
         )
 
         # Build mol objects
