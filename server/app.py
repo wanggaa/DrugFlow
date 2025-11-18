@@ -243,10 +243,10 @@ if __name__ == "__main__":
     import uvicorn
     
     parser = argparse.ArgumentParser(description="DrugFlow API Server")
-    parser.add_argument("--ip", type=str, default="0.0.0.0", help="Server IP address")
+    parser.add_argument("--host", type=str, default="0.0.0.0", help="Server IP address")
     parser.add_argument("--port", type=int, default=8000, help="Server port")
     
     args = parser.parse_args()
     
-    print(f"Starting DrugFlow API server on {args.ip}:{args.port}")
-    uvicorn.run(app, host=args.ip, port=args.port)
+    print(f"Starting DrugFlow API server on {args.host}:{args.port}")
+    uvicorn.run(app, host=args.host, port=args.port)
