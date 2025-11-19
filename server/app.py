@@ -6,11 +6,22 @@ import time
 from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 import psutil
 import json
 from typing import Dict
+import datetime
 
 app = FastAPI(title="DrugFlow API", version="1.0.0")
+
+# 添加CORS中间件
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 允许所有来源，生产环境应该限制为具体域名
+    allow_credentials=True,
+    allow_methods=["*"],  # 允许所有方法
+    allow_headers=["*"],  # 允许所有头信息
+)
 
 # 基础路径配置
 BASE_DIR = Path(__file__).parent.parent  # 指向项目根目录
@@ -224,6 +235,25 @@ async def download_log(task_id: str):
         media_type='text/plain'
     )
 
+@app.get("/status")
+async def get_service_status():
+    """获取后端服务运行状态"""
+    
+    # 检查关键文件是否存在
+    checkpoint_exists = CHECKPOINT_PATH.exists()
+    tasks_dir_exists = TASKS_DIR.exists()
+    
+    # 如果关键文件和目录都存在，则认为服务正常
+    service_ok = checkpoint_exists and tasks_dir_exists
+    
+    status_info = {
+        "status": "running" if service_ok else "error",
+        "message": "服务正常运行" if service_ok else "服务异常，请检查关键文件",
+        "timestamp": datetime.datetime.now().isoformat()
+    }
+    
+    return status_info
+
 @app.get("/")
 async def root():
     """API根端点"""
@@ -231,6 +261,7 @@ async def root():
         "message": "DrugFlow API",
         "version": "1.0.0",
         "endpoints": {
+            "GET /status": "获取服务状态",
             "POST /generate": "提交生成任务（参数：protein, ligand, n_samples）",
             "GET /task_stat/{task_id}": "查询任务状态", 
             "GET /download/{task_id}/samples": "下载生成结果",
