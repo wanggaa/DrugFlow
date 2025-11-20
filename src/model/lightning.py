@@ -16,6 +16,8 @@ from torch.distributions.categorical import Categorical
 import pytorch_lightning as pl
 from torch_scatter import scatter_mean
 
+from scipy.optimize import linear_sum_assignment
+
 import src.utils as utils
 from src.constants import atom_encoder, atom_decoder, aa_encoder, aa_decoder, \
     bond_encoder, bond_decoder, residue_encoder, residue_bond_encoder, \
@@ -966,7 +968,7 @@ class DrugFlow(pl.LightningModule):
 
         return out
 
-    def sample_zt_given_zs(self, zs_ligand, zs_pocket, s, t, delta_eps_x=None, uncertainty=None):
+    def sample_zt_given_zs(self, zs_ligand, zs_pocket, s, t, delta_eps_x=None, uncertainty=None, scaffold=None):
 
         sc_transform = self.get_sc_transform_fn(zs_pocket.get('chi'), zs_ligand['x'], s, None, zs_ligand['mask'], zs_pocket)
         pred_ligand, pred_residues = self.dynamics(
@@ -974,12 +976,39 @@ class DrugFlow(pl.LightningModule):
             sc_transform=sc_transform
         )
 
+        # jwang test algorithm1: recompute generate velocities based on vel_batch
+        # need paramter vel_batch: dict of {start_idx: velocity tensor}
+        # algorithm start
+        # for idx,vel in vel_batch.items():
+        #     n_atoms = vel.size(0)
+        #     pred_ligand['vel'][idx:idx+n_atoms] = vel
+        # algorithm end
+
+        # jwang test algorithm2: change nearest atoms' velocities to scaffold ones
+        # need parameter scaffold: dict with 'x' and 'num_nodes'
+        # algorithm start
+        # num_nodes = scaffold['num_nodes']
+        # start_idxs = [0] + torch.cumsum(num_nodes,dim=0).tolist()[:-1]
+        # n_atoms = scaffold['x'].size(0)
+        # for idx in start_idxs:
+        #     cost_matrix = scaffold['x'][None,:,:] - zs_ligand['x'][idx:idx+n_atoms][:,None,:]
+        #     cost_matrix = cost_matrix.norm(dim=-1).detach().cpu()
+        #     row_ind, col_ind = linear_sum_assignment(cost_matrix)
+        #     # print("assigned atoms:", col_ind)
+        #     # assign velocities
+        #     gt_vel = scaffold['x'][row_ind] - zs_ligand['x'][idx+col_ind]
+        #     gt_vel = gt_vel / (1-s.mean()) / self.module_x.scale
+        #     pred_ligand['vel'][idx+col_ind] = gt_vel
+        # algorithm end
+
         if delta_eps_x is not None:
             pred_ligand['vel'] = pred_ligand['vel'] + delta_eps_x
 
         zt_ligand = zs_ligand.copy()
         zt_ligand['x'] = self.module_x.sample_zt_given_zs(zs_ligand['x'], pred_ligand['vel'], s, t, zs_ligand['mask'])
+       
 
+        
         zt_ligand['h'] = self.module_h.sample_zt_given_zs(zs_ligand['h'], pred_ligand['logits_h'], s, t, zs_ligand['mask'])
         zt_ligand['e'] = self.module_e.sample_zt_given_zs(zs_ligand['e'], pred_ligand['logits_e'], s, t, zs_ligand['edge_mask'])
 
@@ -1040,7 +1069,31 @@ class DrugFlow(pl.LightningModule):
             'sigma_x_squared': torch.zeros(len(ligand['mask']), device=device),
             'entropy_h': torch.zeros(len(ligand['mask']), device=device)
         } if self.predict_confidence else None
-
+        
+        # jwang test algorithm1: recompute generate velocities based on scaffold
+        # algorithm start
+        # gt_vel_batch = {}
+        # if scaffold is not None:
+        #     num_nodes = scaffold['num_nodes']
+        #     start_idxs = [0] + torch.cumsum(num_nodes,dim=0).tolist()[:-1]
+        #     n_atoms = scaffold['x'].size(0)
+            
+        #     for idx in start_idxs:
+        #         gt_vel = scaffold['x'] - ligand['x'][idx:idx+n_atoms]
+        #         gt_vel = gt_vel / self.module_x.scale
+        #         gt_vel_batch[idx] = gt_vel
+                
+                # pred_ligand['logits_h'][idx:idx+n_atoms] = scaffold['one_hot']
+                # 强制定义边的值 ((num_nodes**2 - num_nodes)/2).sum() = n_bonds
+                # 现在问题是需要得知logits_e数据和真实边数据之间的迁移方法
+                # 感觉和bonds[2,66],bond_one_hot[66,5]有关，应该是第一项定义了边的位置，第二项定义了边的类型
+                # 查看值，这个边也是仅包括上半三角形矩阵
+                # pred_ligand['logits_e']
+                # print('working here')
+                # 可以先不定义，尝试以扩散过程的自适应性自动补全
+                # 两个logits均为离散变量，采用连续变量的时间梯度矢量场可能并不合适，先不改
+            
+        # algorithm end
         for i, t in enumerate(torch.linspace(t_start, t_end - delta_t, timesteps)):
             t_array = torch.full((n_samples, 1), fill_value=t, device=device)
 
@@ -1067,8 +1120,9 @@ class DrugFlow(pl.LightningModule):
             else:
                 delta_eps_lig = None
 
+            # jwang: 循环生成函数，这里是需要固定scaffold的
             ligand, pocket = self.sample_zt_given_zs(
-                ligand, pocket, t_array, t_array + delta_t, delta_eps_lig, cumulative_uncertainty)
+                ligand, pocket, t_array, t_array + delta_t, delta_eps_lig, cumulative_uncertainty, scaffold = scaffold)
 
             # save frame
             if (i + 1) % (timesteps // return_frames) == 0:
@@ -1203,7 +1257,7 @@ class DrugFlow(pl.LightningModule):
         num_nodes = self.parse_num_nodes_spec(batch, spec=num_nodes, size_model=size_model)
 
         if scaffold_ligand is not None:
-            scaffold_ligand.num_nodes = num_nodes
+            scaffold_ligand['num_nodes'] = num_nodes
 
         # Sample from prior
         if pocket['x'].numel() > 0:
@@ -1229,6 +1283,7 @@ class DrugFlow(pl.LightningModule):
 
             return rdmols, rdpockets, _ligand['name']
 
+        # jwang: 关键生成函数
         out_tensors_ligand, out_tensors_pocket = self.simulate(
             ligand, pocket, timesteps, 0.0, 1.0,
             guide_log_prob=guide_log_prob,

@@ -64,7 +64,7 @@ def run_generate_process(task_id: str, pdb_file: Path, sdf_file: Path, output_di
         "--checkpoint", str(CHECKPOINT_PATH),
         "--output", str(output_dir / "samples.sdf"),
         "--n_samples", str(n_samples),
-        "--batch_size", "32"
+        "--batch_size", "128"
     ]
     
     # 启动进程并重定向输出到日志文件

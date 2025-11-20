@@ -70,14 +70,16 @@ if __name__ == "__main__":
     p.add_argument('--n_steps', type=int, required=False, default=None, help="Number of denoising steps.")
     p.add_argument('--device', type=str, required=False, default='cuda:0', help="Device to use.")
     p.add_argument('--datadir', type=Path, required=False, default=Path(basedir, 'src', 'default'), help="Needs to be specified to sample molecule sizes.")
-    p.add_argument('--seed', type=int, required=False, default=42, help="Random seed.")
+    p.add_argument('--seed', type=int, required=False, default=None, help="Random seed.")
     p.add_argument('--filter', action='store_true', required=False, default=False, help="Apply basic filters and keep sampling until `n_samples` molecules passing these filters are found.")
     p.add_argument('--metrics_output', type=str, required=False, default=None, help="If provided, metrics will be computed and saved in csv format at this location.")
     p.add_argument('--gnina', type=str, required=False, default=None, help="Path to a gnina executable. Required for computing docking scores.")
     p.add_argument('--reduce', type=str, required=False, default=None, help="Path to a reduce executable. Required for computing interactions.")
     args = p.parse_args()
 
-    utils.set_deterministic(seed=args.seed)
+    if args.seed is not None:
+        utils.set_deterministic(seed=args.seed)
+        
     utils.disable_rdkit_logging()
 
     if args.molecule_size is None and (args.datadir is None or not args.datadir.exists()):
@@ -143,7 +145,6 @@ if __name__ == "__main__":
         pin_memory=True
     )
 
-    scaffold['name'] = 'scaffold'
     
 
     # Start sampling
