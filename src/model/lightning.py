@@ -1006,9 +1006,6 @@ class DrugFlow(pl.LightningModule):
 
         zt_ligand = zs_ligand.copy()
         zt_ligand['x'] = self.module_x.sample_zt_given_zs(zs_ligand['x'], pred_ligand['vel'], s, t, zs_ligand['mask'])
-       
-
-        
         zt_ligand['h'] = self.module_h.sample_zt_given_zs(zs_ligand['h'], pred_ligand['logits_h'], s, t, zs_ligand['mask'])
         zt_ligand['e'] = self.module_e.sample_zt_given_zs(zs_ligand['e'], pred_ligand['logits_e'], s, t, zs_ligand['edge_mask'])
 
@@ -1076,25 +1073,27 @@ class DrugFlow(pl.LightningModule):
         # if scaffold is not None:
         #     num_nodes = scaffold['num_nodes']
         #     start_idxs = [0] + torch.cumsum(num_nodes,dim=0).tolist()[:-1]
-        #     n_atoms = scaffold['x'].size(0)
-            
+        #     n_atoms = scaffold['x'].size(0)   
         #     for idx in start_idxs:
         #         gt_vel = scaffold['x'] - ligand['x'][idx:idx+n_atoms]
         #         gt_vel = gt_vel / self.module_x.scale
         #         gt_vel_batch[idx] = gt_vel
-                
-                # pred_ligand['logits_h'][idx:idx+n_atoms] = scaffold['one_hot']
-                # 强制定义边的值 ((num_nodes**2 - num_nodes)/2).sum() = n_bonds
-                # 现在问题是需要得知logits_e数据和真实边数据之间的迁移方法
-                # 感觉和bonds[2,66],bond_one_hot[66,5]有关，应该是第一项定义了边的位置，第二项定义了边的类型
-                # 查看值，这个边也是仅包括上半三角形矩阵
-                # pred_ligand['logits_e']
-                # print('working here')
-                # 可以先不定义，尝试以扩散过程的自适应性自动补全
-                # 两个logits均为离散变量，采用连续变量的时间梯度矢量场可能并不合适，先不改
-            
+        #         pred_ligand['logits_h'][idx:idx+n_atoms] = scaffold['one_hot']
+        # print('working here')
         # algorithm end
-        for i, t in enumerate(torch.linspace(t_start, t_end - delta_t, timesteps)):
+        
+        # jwang test algorithm3: REPAINT++
+        # 需要保存原始噪声，方便后续进行重复加噪行为。
+        # 可能采用灵活噪声也有效果，作为test algorithm4加入备忘
+        # algorithm start
+        if scaffold is not None:
+            ligand_z0 = ligand.copy()
+            num_nodes = scaffold['num_nodes']
+            start_idxs = [0] + torch.cumsum(num_nodes,dim=0).tolist()[:-1]
+            n_atoms = scaffold['x'].size(0)   
+        # algorithm end
+        
+        for i, t in tqdm(enumerate(torch.linspace(t_start, t_end - delta_t, timesteps)),total=timesteps, desc='Sampling'):
             t_array = torch.full((n_samples, 1), fill_value=t, device=device)
 
             if guide_log_prob is not None:
@@ -1120,9 +1119,27 @@ class DrugFlow(pl.LightningModule):
             else:
                 delta_eps_lig = None
 
+            # jwang test algorithm3: REPAINT++
+            # algorithm start
+            curr_t = t_array.mean()
+            if scaffold is not None and curr_t != 0:
+                for _ in range(10): # iteration 10 times
+                    # compute z_t-1 from z_t
+                    ligand, pocket = self.sample_zt_given_zs(
+                        ligand, pocket, t_array, t_array + delta_t, delta_eps_lig, cumulative_uncertainty)
+                    # mix scaffold and noise stucture in z_t-1
+                    for idx in start_idxs:
+                        ligand['x'][idx:idx+n_atoms] = scaffold['x']
+                    # assign z_t from renoised z_t-1
+                    ligand['x'] = delta_t * ligand_z0['x'] + curr_t / (curr_t+delta_t) * ligand['x']
+            # debug:
+            # if curr_t > 0.99:
+            #     print('在这停顿！')
+            # algorithm end
+            
             # jwang: 循环生成函数，这里是需要固定scaffold的
             ligand, pocket = self.sample_zt_given_zs(
-                ligand, pocket, t_array, t_array + delta_t, delta_eps_lig, cumulative_uncertainty, scaffold = scaffold)
+                ligand, pocket, t_array, t_array + delta_t, delta_eps_lig, cumulative_uncertainty)
 
             # save frame
             if (i + 1) % (timesteps // return_frames) == 0:

@@ -10,3 +10,4 @@ examples/
 checkpoints/
 tasks/
 .vscode/
+dataset

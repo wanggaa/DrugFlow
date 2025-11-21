@@ -6,7 +6,7 @@ flexible_bb: False
 
 train_params:
   logdir: ./runs # symlink to any location you like
-  datadir: ./processed_crossdocked # symlink to the dataset location
+  datadir: ./dataset/processed_crossdocked # symlink to the dataset location
   enable_progress_bar: True
   num_sanity_val_steps: 0
   batch_size: 64
