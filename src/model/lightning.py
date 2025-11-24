@@ -1134,8 +1134,17 @@ class DrugFlow(pl.LightningModule):
                     # mix scaffold and noise stucture in z_t-1
                     cur_n_bonds = 0
                     for node_iter,idx in enumerate(start_idxs):
-                        ligand['x'][idx:idx+n_atoms] = scaffold['x']
-                        ligand['h'][idx:idx+n_atoms] = scaffold['one_hot']
+                        
+                        cost_matrix = scaffold['x'][:,None,:] - ligand['x'][idx:idx + num_nodes[node_iter]][None,:,:]
+                        cost_matrix = cost_matrix.norm(dim=-1).detach().cpu()
+                        row_ind, col_ind = linear_sum_assignment(cost_matrix) # row_ind is sorted
+                        row_ind = torch.tensor(row_ind,device=device)
+                        col_ind = torch.tensor(col_ind,device=device)
+                        
+                        ligand['x'][idx+col_ind] = scaffold['x']
+                        ligand['h'][idx+col_ind] = scaffold['one_hot']
+                        # ligand['x'][idx:idx+n_atoms] = scaffold['x']
+                        # ligand['h'][idx:idx+n_atoms] = scaffold['one_hot']
                         # build index matrix for ligand bonds
                         n_nodes = num_nodes[node_iter]
                         edge_index_matrix = torch.zeros((n_nodes,n_nodes),dtype=torch.long,device=device)
@@ -1147,16 +1156,16 @@ class DrugFlow(pl.LightningModule):
                         
                         # assign bonds and bond types
                         assert scaffold['bonds'].size(0) == 2 and scaffold['bonds'].ndim == 2
-                        ligand['e'][edge_index_matrix[*scaffold['bonds']]] = scaffold['bond_one_hot']
+                        ligand['e'][edge_index_matrix[*col_ind[scaffold['bonds']]]] = scaffold['bond_one_hot']
+                        # ligand['e'][edge_index_matrix[*scaffold['bonds']]] = scaffold['bond_one_hot']
                         
                         
-                    #     cost_matrix = scaffold['x'][None,:,:] - ligand['x'][idx:idx+n_atoms][:,None,:]
-                    #     cost_matrix = cost_matrix.norm(dim=-1).detach().cpu()
-                    #     row_ind, col_ind = linear_sum_assignment(cost_matrix)
-                    #     ligand['x'][idx+col_ind] = scaffold['x'][row_ind]
                         
                     # assign z_t from renoised z_t-1
-                    ligand['x'] = delta_t / (curr_t+delta_t) * ligand_z0['x'] + curr_t / (curr_t+delta_t) * ligand['x']
+                    curr_t_array = t_array / (t_array + delta_t)
+                    ligand['x'] = self.module_x.sample_zt(ligand_z0['x'],ligand['x'],curr_t_array,ligand['mask'])
+                    ligand['h'] = self.module_h.sample_zt(ligand_z0['h'],ligand['h'],curr_t_array,ligand['mask'])
+                    ligand['e'] = self.module_e.sample_zt(ligand_z0['e'],ligand['e'],curr_t_array,ligand['edge_mask'])
                     # ligand['h'] = delta_t / (curr_t+delta_t) * ligand_z0['h'] + curr_t / (curr_t+delta_t) * ligand['h']
                     # ligand['e'] = delta_t / (curr_t+delta_t) * ligand_z0['e'] + curr_t / (curr_t+delta_t) * ligand['e']
             # debug:
