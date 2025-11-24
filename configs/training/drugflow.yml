@@ -9,7 +9,7 @@ train_params:
   datadir: ./dataset/processed_crossdocked # symlink to the dataset location
   enable_progress_bar: True
   num_sanity_val_steps: 0
-  batch_size: 64
+  batch_size: 32
   accumulate_grad_batches: 2
   lr: 5.0e-4
   n_epochs: 1000

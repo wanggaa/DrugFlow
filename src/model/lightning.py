@@ -17,6 +17,7 @@ import pytorch_lightning as pl
 from torch_scatter import scatter_mean
 
 from scipy.optimize import linear_sum_assignment
+from torch_geometric.utils import to_dense_adj
 
 import src.utils as utils
 from src.constants import atom_encoder, atom_decoder, aa_encoder, aa_decoder, \
@@ -1086,11 +1087,12 @@ class DrugFlow(pl.LightningModule):
         # 需要保存原始噪声，方便后续进行重复加噪行为。
         # 可能采用灵活噪声也有效果，作为test algorithm4加入备忘
         # algorithm start
-        # if scaffold is not None:
-        #     ligand_z0 = ligand.copy()
-        #     num_nodes = scaffold['num_nodes']
-        #     start_idxs = [0] + torch.cumsum(num_nodes,dim=0).tolist()[:-1]
-        #     n_atoms = scaffold['x'].size(0)   
+        if scaffold is not None:
+            ligand_z0 = ligand.copy()
+            num_nodes = scaffold['num_nodes']
+            start_idxs = [0] + torch.cumsum(num_nodes,dim=0).tolist()[:-1]
+            n_atoms = scaffold['x'].size(0)            
+            
         # algorithm end
         
         for i, t in tqdm(enumerate(torch.linspace(t_start, t_end - delta_t, timesteps)),total=timesteps, desc='Sampling'):
@@ -1120,18 +1122,43 @@ class DrugFlow(pl.LightningModule):
                 delta_eps_lig = None
 
             # jwang test algorithm3: REPAINT++
+            # jwang test algorithm4: REPAINT++ with nearest scaffold atoms
             # algorithm start
-            # curr_t = t_array.mean()
-            # if scaffold is not None and curr_t != 0:
-            #     for _ in range(10): # iteration 10 times
-            #         # compute z_t-1 from z_t
-            #         ligand, pocket = self.sample_zt_given_zs(
-            #             ligand, pocket, t_array, t_array + delta_t, delta_eps_lig, cumulative_uncertainty)
-            #         # mix scaffold and noise stucture in z_t-1
-            #         for idx in start_idxs:
-            #             ligand['x'][idx:idx+n_atoms] = scaffold['x']
-            #         # assign z_t from renoised z_t-1
-            #         ligand['x'] = delta_t * ligand_z0['x'] + curr_t / (curr_t+delta_t) * ligand['x']
+            curr_t = t_array.mean()
+            if scaffold is not None and curr_t != 0:
+                for _ in range(10): # iteration 10 times
+                    # compute z_t-1 from z_t
+                    ligand, pocket = self.sample_zt_given_zs(
+                        ligand, pocket, t_array, t_array + delta_t, delta_eps_lig, cumulative_uncertainty)
+                    
+                    # mix scaffold and noise stucture in z_t-1
+                    cur_n_bonds = 0
+                    for node_iter,idx in enumerate(start_idxs):
+                        ligand['x'][idx:idx+n_atoms] = scaffold['x']
+                        ligand['h'][idx:idx+n_atoms] = scaffold['one_hot']
+                        # build index matrix for ligand bonds
+                        n_nodes = num_nodes[node_iter]
+                        edge_index_matrix = torch.zeros((n_nodes,n_nodes),dtype=torch.long,device=device)
+                        nodes_idx = torch.arange(n_nodes,device=device)
+                        edges_idx = torch.where(nodes_idx[:,None]<nodes_idx[None,:])
+                        n_edges = edges_idx[0].size(0)
+                        edge_index_matrix[edges_idx] = torch.arange(cur_n_bonds,cur_n_bonds + n_edges, device=device)
+                        cur_n_bonds += n_edges
+                        
+                        # assign bonds and bond types
+                        assert scaffold['bonds'].size(0) == 2 and scaffold['bonds'].ndim == 2
+                        ligand['e'][edge_index_matrix[*scaffold['bonds']]] = scaffold['bond_one_hot']
+                        
+                        
+                    #     cost_matrix = scaffold['x'][None,:,:] - ligand['x'][idx:idx+n_atoms][:,None,:]
+                    #     cost_matrix = cost_matrix.norm(dim=-1).detach().cpu()
+                    #     row_ind, col_ind = linear_sum_assignment(cost_matrix)
+                    #     ligand['x'][idx+col_ind] = scaffold['x'][row_ind]
+                        
+                    # assign z_t from renoised z_t-1
+                    ligand['x'] = delta_t / (curr_t+delta_t) * ligand_z0['x'] + curr_t / (curr_t+delta_t) * ligand['x']
+                    # ligand['h'] = delta_t / (curr_t+delta_t) * ligand_z0['h'] + curr_t / (curr_t+delta_t) * ligand['h']
+                    # ligand['e'] = delta_t / (curr_t+delta_t) * ligand_z0['e'] + curr_t / (curr_t+delta_t) * ligand['e']
             # debug:
             # if curr_t > 0.99:
             #     print('在这停顿！')

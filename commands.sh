@@ -19,3 +19,5 @@ python -m debugpy --wait-for-client --listen 5678 src/inpaint.py \
   --scaffold_ligand examples/7RPZ/7RPZ_scaffold.sdf \
   --n_samples 10 \
   --batch_size 32
+
+python -m debugpy --wait-for-client --listen 5678 src/train.py --config configs/training/drugflow.yml
