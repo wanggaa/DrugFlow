@@ -991,8 +991,8 @@ class DrugFlow(pl.LightningModule):
         # num_nodes = scaffold['num_nodes']
         # start_idxs = [0] + torch.cumsum(num_nodes,dim=0).tolist()[:-1]
         # n_atoms = scaffold['x'].size(0)
-        # for idx in start_idxs:
-        #     cost_matrix = scaffold['x'][None,:,:] - zs_ligand['x'][idx:idx+n_atoms][:,None,:]
+        # for i,idx in enumerate(start_idxs):
+        #     cost_matrix = scaffold['x'][:,None,:] - zs_ligand['x'][idx:idx+num_nodes[i]][None,:,:]
         #     cost_matrix = cost_matrix.norm(dim=-1).detach().cpu()
         #     row_ind, col_ind = linear_sum_assignment(cost_matrix)
         #     # print("assigned atoms:", col_ind)
@@ -1000,6 +1000,11 @@ class DrugFlow(pl.LightningModule):
         #     gt_vel = scaffold['x'][row_ind] - zs_ligand['x'][idx+col_ind]
         #     gt_vel = gt_vel / (1-s.mean()) / self.module_x.scale
         #     pred_ligand['vel'][idx+col_ind] = gt_vel
+        #     # assign atom types
+            
+        #     # assign edge types
+            
+            
         # algorithm end
 
         if delta_eps_x is not None:
@@ -1014,7 +1019,7 @@ class DrugFlow(pl.LightningModule):
         if self.flexible_bb:
             zt_trans_pocket = self.module_trans.sample_zt_given_zs(zs_pocket['x'], pred_residues['trans'], s, t, zs_pocket['mask'])
             zt_rot_pocket = self.module_rot.sample_zt_given_zs(zs_pocket['axis_angle'], pred_residues['rot'], s, t, zs_pocket['mask'])
-
+   
             # update pocket in-place
             zt_pocket.set_frame(zt_trans_pocket, zt_rot_pocket)
 
@@ -1129,7 +1134,7 @@ class DrugFlow(pl.LightningModule):
                 for _ in range(10): # iteration 10 times
                     # compute z_t-1 from z_t
                     ligand, pocket = self.sample_zt_given_zs(
-                        ligand, pocket, t_array, t_array + delta_t, delta_eps_lig, cumulative_uncertainty)
+                        ligand, pocket, t_array, t_array + delta_t, delta_eps_lig, cumulative_uncertainty, scaffold=scaffold)
                     
                     # mix scaffold and noise stucture in z_t-1
                     cur_n_bonds = 0
@@ -1166,8 +1171,7 @@ class DrugFlow(pl.LightningModule):
                     ligand['x'] = self.module_x.sample_zt(ligand_z0['x'],ligand['x'],curr_t_array,ligand['mask'])
                     ligand['h'] = self.module_h.sample_zt(ligand_z0['h'],ligand['h'],curr_t_array,ligand['mask'])
                     ligand['e'] = self.module_e.sample_zt(ligand_z0['e'],ligand['e'],curr_t_array,ligand['edge_mask'])
-                    # ligand['h'] = delta_t / (curr_t+delta_t) * ligand_z0['h'] + curr_t / (curr_t+delta_t) * ligand['h']
-                    # ligand['e'] = delta_t / (curr_t+delta_t) * ligand_z0['e'] + curr_t / (curr_t+delta_t) * ligand['e']
+                    
             # debug:
             # if curr_t > 0.99:
             #     print('在这停顿！')
@@ -1175,7 +1179,7 @@ class DrugFlow(pl.LightningModule):
             
             # jwang: 循环生成函数，这里是需要固定scaffold的
             ligand, pocket = self.sample_zt_given_zs(
-                ligand, pocket, t_array, t_array + delta_t, delta_eps_lig, cumulative_uncertainty)
+                ligand, pocket, t_array, t_array + delta_t, delta_eps_lig, cumulative_uncertainty, scaffold=scaffold)
 
             # save frame
             if (i + 1) % (timesteps // return_frames) == 0:

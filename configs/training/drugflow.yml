@@ -21,7 +21,7 @@ train_params:
   sharded_dataset: False
 
 wandb_params:
-  mode: online  # disabled, offline, online
+  mode: disabled  # disabled, offline, online
   entity:
   group: crossdocked
 
