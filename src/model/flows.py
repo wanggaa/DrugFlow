@@ -80,7 +80,7 @@ class CoordICFM(ICFM):
     def compute_loss(self, pred, z0, z1, t, batch_mask, reduce='mean'):
         """ Compute loss per sample. """
 
-        loss = torch.sum((pred - (z1 - z0) / self.scale) ** 2, dim=-1)
+        loss = torch.sum((pred - z1 / self.scale) ** 2, dim=-1)
 
         return self.reduce_loss(loss, batch_mask, reduce)
 

@@ -978,13 +978,13 @@ class DrugFlow(pl.LightningModule):
             sc_transform=sc_transform
         )
 
-        # jwang test algorithm1: recompute generate velocities based on vel_batch
-        # need paramter vel_batch: dict of {start_idx: velocity tensor}
-        # algorithm start
+        # # jwang test algorithm1: recompute generate velocities based on vel_batch
+        # # need paramter vel_batch: dict of {start_idx: velocity tensor}
+        # # algorithm start
         # for idx,vel in vel_batch.items():
         #     n_atoms = vel.size(0)
         #     pred_ligand['vel'][idx:idx+n_atoms] = vel
-        # algorithm end
+        # # algorithm end
 
         # # jwang test algorithm2: change nearest atoms' velocities to scaffold ones
         # # need parameter scaffold: dict with 'x' and 'num_nodes'
