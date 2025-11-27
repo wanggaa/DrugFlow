@@ -1,10 +1,29 @@
 from functools import reduce
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from torch_scatter import scatter_mean, scatter_add
 
 from src.utils import bvm
 
+BAYES_THRESHOLD = 0.5
+class BinaryThresholdSTE(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, input):
+        return (input > BAYES_THRESHOLD).float()
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return F.hardtanh(grad_output)
+    
+class StraightThroughEstimator(nn.Module):
+    def __init__(self,threhold=0.5):
+        super(StraightThroughEstimator, self).__init__()
+        self.threhold=threhold
+
+    def forward(self, x):
+            x = BinaryThresholdSTE.apply(x)
+            return x
 
 class LinearSchedule:
     """
@@ -101,7 +120,7 @@ class UniformPriorMarkovBridge:
         zt = self.sample_categorical(self.p_zt_given_zs(zs, p_z1, s, t, batch_mask))
         return zt
 
-    def compute_loss(self, pred_logits, zs, z1, batch_mask, s, t, reduce='mean'):
+    def compute_loss(self, pred_logits, zs, z1, batch_mask, s, t, reduce='mean', connectivity_lambda=None):
         """ Compute loss per sample. """
         assert reduce in {'mean', 'sum', 'none'}
 
@@ -117,6 +136,22 @@ class UniformPriorMarkovBridge:
             loss = scatter_mean(loss, batch_mask, dim=0)
         elif reduce == 'sum':
             loss = scatter_add(loss, batch_mask, dim=0)
+
+        # jwang test:
+        t_data = BinaryThresholdSTE.apply(true_p_zs[:,0]) - BinaryThresholdSTE.apply(pred_p_zs[:,0])
+        if (t_data**2).sum() > 0:
+            print(f'there is diff in pred and true edges:{(t_data**2).sum().item()}')
+
+        # jwang test algorithm 5: algorithic connectivity
+        # loss compute from laplacian Matrix L = D - A
+        # algorithm begin
+        if connectivity_lambda is not None:
+            invalid_edges = BinaryThresholdSTE.apply(pred_p_zs[...,0])  # (num_edges)
+            edge_index = None
+            Laplacian_Matrix = None # must requires_grad True
+            connect_loss = None # must requires_grad True
+            loss = loss + connect_loss * connectivity_lambda
+        # algorithm end
 
         return loss
 
