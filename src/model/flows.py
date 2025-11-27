@@ -55,7 +55,7 @@ class CoordICFM(ICFM):
     def sample_zt_given_zs(self, zs, pred, s, t, batch_mask):
         """ Perform an explicit Euler step. """
         step_size = t - s
-        zt = zs + step_size[batch_mask] * self.scale * pred
+        zt = ((1-t)/(1-s))[batch_mask] * zs + ((t-s)/(1-s))[batch_mask] * self.scale * pred
         return zt
 
     def sample_z0(self, com, batch_mask):
