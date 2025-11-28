@@ -12,7 +12,7 @@ python -m debugpy --wait-for-client --listen 5678 src/generate.py \
   --output examples/7RPZ/sample.sdf 
 
 python -m debugpy --wait-for-client --listen 5678 src/inpaint.py \
-  --checkpoint checkpoints/drugflow.ckpt \
+  --checkpoint checkpoints/epoch=68-step=53406.ckpt \
   --protein examples/7RPZ/7RPZ_protein.pdb \
   --ref_ligand examples/7RPZ/7RPZ_ligand.sdf \
   --output examples/7RPZ/sample.sdf \
