@@ -1,4 +1,4 @@
-run_name: pred_z1 # iclr_drugflow_T5000
+run_name: pred_z1_debug # iclr_drugflow_T5000
 pocket_representation: CA+
 virtual_nodes: [0, 10]
 flexible: False

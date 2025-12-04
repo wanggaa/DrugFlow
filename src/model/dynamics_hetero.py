@@ -715,6 +715,8 @@ class DynamicsHetero(DynamicsBase):
 
 
         # Self-conditioning
+        # jwang: ?这里等同将几何信息混入到h中，那你模型的等变性质如何保证的？
+        # h_atoms_sc[1].shape = (310,1,3)
         if h_atoms_sc is not None:
             h_atoms = (torch.cat([h_atoms, h_atoms_sc[0]], dim=-1), h_atoms_sc[1])
 

@@ -6,7 +6,7 @@ python -m debugpy --wait-for-client --listen 5678 src/generate.py \
   --output examples/kras/samples.sdf
 
 python -m debugpy --wait-for-client --listen 5678 src/generate.py \
-  --checkpoint checkpoints/drugflow.ckpt \
+  --checkpoint runs/pred_z1/checkpoints/epoch=341-step=264708.ckpt \
   --protein examples/7RPZ/7RPZ_protein.pdb \
   --ref_ligand examples/7RPZ/7RPZ_ligand.sdf \
   --output examples/7RPZ/sample.sdf 

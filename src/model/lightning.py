@@ -1207,9 +1207,9 @@ class DrugFlow(pl.LightningModule):
             # #     print('在这停顿！')
             # # algorithm end
             
+            # debug here
             # jwang: 循环生成函数，这里是需要固定scaffold的
-            ligand, pocket = self.sample_zt_given_zs(
-                ligand, pocket, t_array, t_array + delta_t, delta_eps_lig, cumulative_uncertainty, scaffold=scaffold)
+            ligand, pocket = self.sample_zt_given_zs(ligand, pocket, t_array, t_array + delta_t, delta_eps_lig, cumulative_uncertainty, scaffold=scaffold)
 
             # save frame
             if (i + 1) % (timesteps // return_frames) == 0:
@@ -1245,6 +1245,7 @@ class DrugFlow(pl.LightningModule):
 
         # Sample from Normal distribution in the pocket center
         pocket_com = scatter_mean(pocket['x'], pocket['mask'], dim=0)
+        # zero_com = torch.zeros_like(pocket_com)
         z0_x = self.module_x.sample_z0(pocket_com, lig_mask)
         z0_h = self.module_h.sample_z0(lig_mask)
         z0_e = self.module_e.sample_z0(lig_edge_mask)
@@ -1352,6 +1353,8 @@ class DrugFlow(pl.LightningModule):
         else:
             ligand = self.init_ligand(num_nodes, _ligand)
         pocket = self.init_pocket(pocket)
+
+        ligand,pocket = center_data(ligand,pocket)
 
         # return prior samples
         if timesteps == 0:

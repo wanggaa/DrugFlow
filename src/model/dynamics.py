@@ -172,34 +172,34 @@ class DynamicsBase(nn.Module):
         """
         pass
 
-    def make_sc_input(self, pred_ligand, pred_residues, sc_transform):
+    def make_sc_input(self, prev_ligand, prev_residues, sc_transform):
 
         if self.predict_confidence:
-            h_atoms_sc = (torch.cat([pred_ligand['logits_h'], pred_ligand['uncertainty_vel'].unsqueeze(1)], dim=-1),
-                          pred_ligand['vel'].unsqueeze(1))
+            h_atoms_sc = (torch.cat([prev_ligand['logits_h'], prev_ligand['uncertainty_vel'].unsqueeze(1)], dim=-1),
+                          prev_ligand['vel'].unsqueeze(1))
         else:
-            h_atoms_sc = (pred_ligand['logits_h'], pred_ligand['vel'].unsqueeze(1))
-        e_atoms_sc = pred_ligand['logits_e']
+            h_atoms_sc = (prev_ligand['logits_h'], prev_ligand['vel'].unsqueeze(1))
+        e_atoms_sc = prev_ligand['logits_e']
 
         if self.predict_frames:
-            h_residues_sc = (torch.cat([pred_residues['chi'], pred_residues['rot']], dim=-1),
-                             pred_residues['trans'].unsqueeze(1))
+            h_residues_sc = (torch.cat([prev_residues['chi'], prev_residues['rot']], dim=-1),
+                             prev_residues['trans'].unsqueeze(1))
         elif self.predict_angles:
-            h_residues_sc = pred_residues['chi']
+            h_residues_sc = prev_residues['chi']
         else:
             h_residues_sc = None
 
         if self.augment_residue_sc and h_residues_sc is not None:
             if self.predict_frames:
                 h_residues_sc = (h_residues_sc[0], torch.cat(
-                    [h_residues_sc[1], sc_transform['residues'](pred_residues['chi'], pred_residues['trans'].squeeze(1), pred_residues['rot'])], dim=1))
+                    [h_residues_sc[1], sc_transform['residues'](prev_residues['chi'], prev_residues['trans'].squeeze(1), prev_residues['rot'])], dim=1))
 
             else:
-                h_residues_sc = (h_residues_sc, sc_transform['residues'](pred_residues['chi']))
+                h_residues_sc = (h_residues_sc, sc_transform['residues'](prev_residues['chi']))
 
         if self.augment_ligand_sc:
             h_atoms_sc = (h_atoms_sc[0], torch.cat(
-                [h_atoms_sc[1], sc_transform['atoms'](pred_ligand['vel'].unsqueeze(1))], dim=1))
+                [h_atoms_sc[1], sc_transform['atoms'](prev_ligand['vel'].unsqueeze(1))], dim=1))
 
         return h_atoms_sc, e_atoms_sc, h_residues_sc
 
@@ -266,6 +266,7 @@ class DynamicsBase(nn.Module):
 
     def compute_extra_features(self, batch_mask, edge_indices, edge_types):
 
+        # jwang: ?
         feat = torch.zeros(len(batch_mask), 0, device=batch_mask.device)
 
         if not (self.add_cycle_counts or self.add_spectral_feat):
