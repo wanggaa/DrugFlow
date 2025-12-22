@@ -7,6 +7,7 @@ flexible_bb: False
 train_params:
   logdir: ./runs # symlink to any location you like
   datadir: ./dataset/processed_crossdocked # symlink to the dataset location
+  geom_datadir: /home/jwang/Workplace/e3pen/dataset/raw/GEOM
   enable_progress_bar: True
   num_sanity_val_steps: 0
   batch_size: 32

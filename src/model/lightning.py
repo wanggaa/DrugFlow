@@ -127,6 +127,8 @@ class DrugFlow(pl.LightningModule):
 
         # Training parameters
         self.datadir = train_params.datadir
+        self.geom_datadir = train_params.geom_datadir
+        
         self.receptor_dir = train_params.datadir
         self.batch_size = train_params.batch_size
         self.lr = train_params.lr
@@ -403,7 +405,7 @@ class DrugFlow(pl.LightningModule):
                 catch_errors=catch_errors
             )
         if stage == 'train':
-            geom_path = Path('/home/jwang/Workplace/e3pen/dataset/raw/GEOM')
+            geom_path = Path(self.geom_datadir)
         else:
             geom_path = None
         return ProcessedLigandPocketDataset(
