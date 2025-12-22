@@ -68,37 +68,38 @@ def collate_entity(batch):
 
     out = {}
     for prop in batch[0].keys():
+        try:
+            if prop == 'name':
+                out[prop] = [x[prop] for x in batch]
 
-        if prop == 'name':
-            out[prop] = [x[prop] for x in batch]
+            elif prop == 'size' or prop == 'n_bonds':
+                out[prop] = torch.tensor([x[prop] for x in batch])
 
-        elif prop == 'size' or prop == 'n_bonds':
-            out[prop] = torch.tensor([x[prop] for x in batch])
+            elif prop == 'bonds':
+                # index offset
+                offset = list(accumulate([x['size'] for x in batch], initial=0))
+                out[prop] = torch.cat([x[prop] + offset[i] for i, x in enumerate(batch)], dim=1)
 
-        elif prop == 'bonds':
-            # index offset
-            offset = list(accumulate([x['size'] for x in batch], initial=0))
-            out[prop] = torch.cat([x[prop] + offset[i] for i, x in enumerate(batch)], dim=1)
+            elif prop == 'residues':
+                out[prop] = list(chain.from_iterable(x[prop] for x in batch))
 
-        elif prop == 'residues':
-            out[prop] = list(chain.from_iterable(x[prop] for x in batch))
+            elif prop in {'mask', 'bond_mask'}:
+                pass  # batch masks will be written later
 
-        elif prop in {'mask', 'bond_mask'}:
-            pass  # batch masks will be written later
+            else:
+                out[prop] = torch.cat([x[prop] for x in batch], dim=0)
 
-        else:
-            out[prop] = torch.cat([x[prop] for x in batch], dim=0)
-
-        # Create batch masks
-        # make sure indices in batch start at zero (needed for torch_scatter)
-        if prop == 'x':
-            out['mask'] = torch.cat([i * torch.ones(len(x[prop]), dtype=torch.int64, device=x[prop].device)
-                                     for i, x in enumerate(batch)], dim=0)
-        if prop == 'bond_one_hot':
-            # TODO: this is not necessary as it can be computed on-the-fly as bond_mask = mask[bonds[0]] or bond_mask = mask[bonds[1]]
-            out['bond_mask'] = torch.cat([i * torch.ones(len(x[prop]), dtype=torch.int64, device=x[prop].device)
-                                          for i, x in enumerate(batch)], dim=0)
-
+            # Create batch masks
+            # make sure indices in batch start at zero (needed for torch_scatter)
+            if prop == 'x':
+                out['mask'] = torch.cat([i * torch.ones(len(x[prop]), dtype=torch.int64, device=x[prop].device)
+                                        for i, x in enumerate(batch)], dim=0)
+            if prop == 'bond_one_hot':
+                # TODO: this is not necessary as it can be computed on-the-fly as bond_mask = mask[bonds[0]] or bond_mask = mask[bonds[1]]
+                out['bond_mask'] = torch.cat([i * torch.ones(len(x[prop]), dtype=torch.int64, device=x[prop].device)
+                                            for i, x in enumerate(batch)], dim=0)
+        except Exception as e:
+            out[prop] = torch.tensor([])
     return out
 
 

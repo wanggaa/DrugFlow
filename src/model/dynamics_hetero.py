@@ -674,6 +674,15 @@ class DynamicsHetero(DynamicsBase):
         :param h_residues_sc: additional node feature for self-conditioning, tensor or tuple
         :return:
         """
+        
+        
+        empty_pocket = (len(pocket['x']) == 0)
+        if empty_pocket:
+            pocket['mask'] = torch.tensor([], device=x_atoms.device,dtype=torch.int64)
+            # del(pocket['bonds'])
+            # del(pocket['v'])
+        
+        
         x_residues, h_residues, mask_residues = pocket['x'], pocket['one_hot'], pocket['mask']
         if 'bonds' in pocket:
             bonds_pocket = (pocket['bonds'], pocket['bond_one_hot'])
@@ -715,8 +724,6 @@ class DynamicsHetero(DynamicsBase):
 
 
         # Self-conditioning
-        # jwang: ?这里等同将几何信息混入到h中，那你模型的等变性质如何保证的？
-        # h_atoms_sc[1].shape = (310,1,3)
         if h_atoms_sc is not None:
             h_atoms = (torch.cat([h_atoms, h_atoms_sc[0]], dim=-1), h_atoms_sc[1])
 
@@ -740,8 +747,6 @@ class DynamicsHetero(DynamicsBase):
             else: 
                 h_atoms = torch.cat([h_atoms, t[mask_atoms]], dim=1)
             h_residues = (torch.cat([h_residues[0], t[mask_residues]], dim=1), h_residues[1])
-
-        empty_pocket = (len(pocket['x']) == 0)
 
         # Process edges and encode in shared feature space
         edge_index_dict, edge_attr_dict = self.get_edges(

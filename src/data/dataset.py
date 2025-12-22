@@ -4,15 +4,23 @@ import warnings
 import torch
 import webdataset as wds
 
+import json
+import pickle
+
 from pathlib import Path
 from torch.utils.data import Dataset
 
 from src.data.data_utils import TensorDict, collate_entity
 from src.constants import WEBDATASET_SHARD_SIZE, WEBDATASET_VAL_SIZE
 
+from src.constants import atom_encoder,bond_encoder
+from src.data.data_utils import prepare_ligand
+
+from collections import defaultdict
+from tqdm import tqdm
 
 class ProcessedLigandPocketDataset(Dataset):
-    def __init__(self, pt_path, ligand_transform=None, pocket_transform=None,
+    def __init__(self, pt_path, geom_path=None, ligand_transform=None, pocket_transform=None,
                  catch_errors=False):
 
         self.ligand_transform = ligand_transform
@@ -20,34 +28,95 @@ class ProcessedLigandPocketDataset(Dataset):
         self.catch_errors = catch_errors
         self.pt_path = pt_path
 
-        self.data = torch.load(pt_path)
+        self.ligand_data_path = Path(pt_path.as_posix().replace('.pt','_ligands.pt'))
+        
+        self.ligand_data = defaultdict(lambda:[])
+        if geom_path is not None and not self.ligand_data_path.exists():
+            self.geom_path = geom_path
+            summary_file = geom_path.joinpath('summary_drugs.json')
+            assert summary_file.exists(), f"GEOM summary file not found at {summary_file}"
+            with open(summary_file,'r') as f:
+                geom_drugs_summ = json.load(f)
+                
+            list_smiles = tqdm(list(geom_drugs_summ.keys()))
+            for smiles in list_smiles:
+                try:
+                    pickle_path = Path(geom_drugs_summ[smiles]['pickle_path'])
+                    pickle_path = self.geom_path.joinpath(pickle_path)
 
+                    with open(pickle_path,'rb') as f:
+                        mol_data = pickle.load(f)
+
+                    conformers = mol_data['conformers']
+                    bolzmann_weights = [cfm['boltzmannweight'] for cfm in conformers]
+                    # target_conformer = random.choices(conformers,weights=bolzmann_weights,k=1)[0]
+                    target_conformer = conformers[bolzmann_weights.index(max(bolzmann_weights))]
+                    
+                    rdmol = target_conformer['rd_mol']
+                    ligand = prepare_ligand(rdmol,atom_encoder,bond_encoder)
+                    for k in ligand.keys():
+                        self.ligand_data[k].append(ligand[k])
+                    self.ligand_data['name'].append(smiles)
+                    
+                except Exception as e:
+                    warnings.warn(f"Failed to process GEOM data for {smiles}: {e}")
+            torch.save(dict(self.ligand_data),self.ligand_data_path)
+        elif geom_path is not None and self.ligand_data_path.exists():    
+            self.ligand_data = torch.load(self.ligand_data_path, weights_only=False)
+            
+        self.ligand_pocket_data = torch.load(pt_path)
+        print(pt_path)
         # add number of nodes for convenience
         for entity in ['ligands', 'pockets']:
-            self.data[entity]['size'] = torch.tensor([len(x) for x in self.data[entity]['x']])
-            self.data[entity]['n_bonds'] = torch.tensor([len(x) for x in self.data[entity]['bond_one_hot']])
+            self.ligand_pocket_data[entity]['size'] = torch.tensor([len(x) for x in self.ligand_pocket_data[entity]['x']])
+            self.ligand_pocket_data[entity]['n_bonds'] = torch.tensor([len(x) for x in self.ligand_pocket_data[entity]['bond_one_hot']])
 
+        self.ligand_pocket_size = len(self.ligand_pocket_data['pockets']['x'])
+        self.pocket_keys = self.ligand_pocket_data['pockets'].keys()
+        
     def __len__(self):
-        return len(self.data['ligands']['name'])
+        return len(self.ligand_pocket_data['ligands']['name']) + len(self.ligand_data['name'])
 
     def __getitem__(self, idx):
+        # idx = 100000 # for debug
         data = {}
-        data['ligand'] = {key: val[idx] for key, val in self.data['ligands'].items()}
-        data['pocket'] = {key: val[idx] for key, val in self.data['pockets'].items()}
-        try:
-            if self.ligand_transform is not None:
-                data['ligand'] = self.ligand_transform(data['ligand'])
-            if self.pocket_transform is not None:
-                data['pocket'] = self.pocket_transform(data['pocket'])
-        except (RuntimeError, ValueError) as e:
-            if self.catch_errors:
-                warnings.warn(f"{type(e).__name__}('{e}') in data transform. "
-                              f"Returning random item instead")
-                # replace bad item with a random one
-                rand_idx = random.randint(0, len(self) - 1)
-                return self[rand_idx]
-            else:
-                raise e
+        if idx < self.ligand_pocket_size:
+            data['ligand'] = {key: val[idx] for key, val in self.ligand_pocket_data['ligands'].items()}
+            data['pocket'] = {key: val[idx] for key, val in self.ligand_pocket_data['pockets'].items()}
+            try:
+                if self.ligand_transform is not None:
+                    data['ligand'] = self.ligand_transform(data['ligand'])
+                if self.pocket_transform is not None:
+                    data['pocket'] = self.pocket_transform(data['pocket'])
+            except (RuntimeError, ValueError) as e:
+                if self.catch_errors:
+                    warnings.warn(f"{type(e).__name__}('{e}') in data transform. "
+                                f"Returning random item instead")
+                    # replace bad item with a random one
+                    rand_idx = random.randint(0, len(self) - 1)
+                    return self[rand_idx]
+                else:
+                    raise e
+        else:
+            idx = idx - self.ligand_pocket_size
+            data['ligand'] = {key: val[idx] for key, val in self.ligand_data.items()}
+            data['pocket'] = {key: [] for key in self.pocket_keys}
+            data['pocket']['is_existing'] = False
+            data['pocket']['mask'] = torch.tensor([])
+            try:
+                if self.ligand_transform is not None:
+                    data['ligand'] = self.ligand_transform(data['ligand'])
+                if self.pocket_transform is not None:
+                    data['pocket'] = self.pocket_transform(data['pocket'])
+            except (RuntimeError, ValueError) as e:
+                if self.catch_errors:
+                    warnings.warn(f"{type(e).__name__}('{e}') in data transform. "
+                                f"Returning random item instead")
+                    # replace bad item with a random one
+                    rand_idx = random.randint(0, len(self) - 1)
+                    return self[rand_idx]
+                else:
+                    raise e  
         return data
 
     @staticmethod
@@ -75,7 +144,7 @@ class ClusteredDataset(ProcessedLigandPocketDataset):
     def __init__(self, pt_path, ligand_transform=None, pocket_transform=None,
                  catch_errors=False):
         super().__init__(pt_path, ligand_transform, pocket_transform, catch_errors)
-        self.clusters = list(self.data['clusters'].values())
+        self.clusters = list(self.ligand_pocket_data['clusters'].values())
 
     def __len__(self):
         return len(self.clusters)

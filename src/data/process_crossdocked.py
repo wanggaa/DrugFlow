@@ -48,7 +48,7 @@ if __name__ == '__main__':
     if args.toy:
         dirname += '_toy'
     processed_dir = Path(args.basedir, dirname) if args.outdir is None else args.outdir
-    processed_dir.mkdir(parents=True)
+    processed_dir.mkdir(parents=True,exist_ok=True)
 
     # Read data split
     split_path = Path(args.basedir, 'split_by_name.pt') if args.split_path is None else args.split_path

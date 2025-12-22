@@ -20,4 +20,12 @@ python -m debugpy --wait-for-client --listen 5678 src/inpaint.py \
   --n_samples 10 \
   --batch_size 32
 
+
+# train command
 python -m debugpy --wait-for-client --listen 5678 src/train.py --config configs/training/drugflow.yml
+
+# data preprocess command 
+python -m debugpy --wait-for-client --listen 5678 src/data/process_crossdocked.py \
+  /home/jwang/Workplace/e3pen/dataset/raw/CrossDocked/ \
+  --outdir /home/jwang/Workplace/e3pen/dataset/processed/CrossDocked \
+  --flex

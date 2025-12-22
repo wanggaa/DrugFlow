@@ -402,9 +402,13 @@ class DrugFlow(pl.LightningModule):
                 pocket_transform=pocket_transform,
                 catch_errors=catch_errors
             )
-
+        if stage == 'train':
+            geom_path = Path('/home/jwang/Workplace/e3pen/dataset/raw/GEOM')
+        else:
+            geom_path = None
         return ProcessedLigandPocketDataset(
             pt_path=Path(self.datadir, 'val.pt' if self.debug else f'{stage}.pt'),
+            geom_path = geom_path,
             ligand_transform=ligand_transform,
             pocket_transform=pocket_transform,
             catch_errors=catch_errors
@@ -581,7 +585,7 @@ class DrugFlow(pl.LightningModule):
         # Predict denoising
         sc_transform = self.get_sc_transform_fn(zt_chi, zt_x, t, z0_chi, ligand['mask'], pocket)
         # sc_transform = None
-        pred_ligand, pred_residues = self.dynamics(
+        pred_ligand, pred_residues = self.dynamics.forward(
             zt_x, zt_h, ligand['mask'], pocket, t,
             bonds_ligand=(ligand['bonds'], zt_e), sc_transform=sc_transform
         )
@@ -986,45 +990,43 @@ class DrugFlow(pl.LightningModule):
         #     pred_ligand['vel'][idx:idx+n_atoms] = vel
         # # algorithm end
 
-        # # jwang test algorithm2: change nearest atoms' velocities to scaffold ones
-        # # need parameter scaffold: dict with 'x' and 'num_nodes'
-        # # algorithm start
-        # num_nodes = torch.tensor(scaffold['num_nodes'])
-        # node_start_idxs = torch.cumsum(num_nodes,dim=0) - num_nodes
-        # num_edges = (num_nodes ** 2 - num_nodes)//2
-        # edge_start_idxs = torch.cumsum(num_edges,dim=0) - num_edges
-        # n_scaffold_atoms = scaffold['x'].size(0)
-        # for i,idx in enumerate(node_start_idxs):
-        #     # assign atom coordinates to nearest ones
+        # jwang test algorithm2: change nearest atoms' velocities to scaffold ones
+        # need parameter scaffold: dict with 'x' and 'num_nodes'
+        # algorithm start
+        node_start_idxs = []
+        if scaffold:
+            num_nodes = torch.tensor(scaffold['num_nodes'])
+            node_start_idxs = torch.cumsum(num_nodes,dim=0) - num_nodes
+            num_edges = (num_nodes ** 2 - num_nodes)//2
+            edge_start_idxs = torch.cumsum(num_edges,dim=0) - num_edges
+            n_scaffold_atoms = scaffold['x'].size(0)
+            scaffold_x = (scaffold['x'] - scaffold['x'].mean(dim=0,keepdim=True)) / self.module_x.scale
             
-        #     # cost_matrix = scaffold['x'][:,None,:] - zs_ligand['x'][idx:idx+num_nodes[i]][None,:,:]
-        #     # cost_matrix = cost_matrix.norm(dim=-1).detach().cpu()
-        #     # row_ind, col_ind = linear_sum_assignment(cost_matrix)
-        #     # print("assigned atoms:", col_ind)
-        #     # assign velocities
-        #     # gt_vel = scaffold['x'][row_ind] - zs_ligand['x'][idx+col_ind]
-        #     # gt_vel = gt_vel / (1-s.mean()) / self.module_x.scale
-        #     # pred_ligand['vel'][idx+col_ind] = gt_vel
-        #     gt_vel = scaffold['x'] - zs_ligand['x'][idx:idx+n_scaffold_atoms]
-        #     gt_vel = gt_vel / (1-s.mean()) / self.module_x.scale
-        #     pred_ligand['vel'][idx:idx+n_scaffold_atoms] = gt_vel
+        for i,idx in enumerate(node_start_idxs):
+            # # nearest ones
+            # cost_matrix = scaffold_x[:,None,:] - zs_ligand['x'][idx:idx+num_nodes[i]][None,:,:]
+            # cost_matrix = cost_matrix.norm(dim=-1).detach().cpu()
+            # row_ind, col_ind = linear_sum_assignment(cost_matrix)
+            # # assign atom coordinates
             
-        #     # assign atom types
-        #     pred_ligand['logits_h'][idx:idx+n_scaffold_atoms] = torch.log(torch.clip(scaffold['one_hot'],min=1e-8))
+            pred_ligand['vel'][idx:idx+n_scaffold_atoms] = scaffold_x
             
-        #     # assign edge types
-        #     n_nodes = num_nodes[i]
-        #     edge_index_matrix = torch.zeros((n_nodes,n_nodes),dtype=torch.long,device=device)
-        #     nodes_idx = torch.arange(n_nodes,device=device)
-        #     edges_idx = torch.where(nodes_idx[:,None]<nodes_idx[None,:])
-        #     n_edges = edges_idx[0].size(0)
-        #     edge_index_matrix[edges_idx] = torch.arange(edge_start_idxs[i],edge_start_idxs[i] + n_edges, device=device)
+            # assign atom types
+            pred_ligand['logits_h'][idx:idx+n_scaffold_atoms] = torch.log(torch.clip(scaffold['one_hot'],min=1e-8))
             
-        #     # logits 并不是概率对应的值，其需要计算为softmax
-        #     # scaffold['bond_one_hot']直接为概率编码，不需要再经过softmax了
-        #     pred_ligand['logits_e'][edge_index_matrix[*scaffold['bonds']]] = torch.log(torch.clip(scaffold['bond_one_hot'],min=1e-8))
+            # # assign edge types
+            # n_nodes = num_nodes[i]
+            # edge_index_matrix = torch.zeros((n_nodes,n_nodes),dtype=torch.long,device=device)
+            # nodes_idx = torch.arange(n_nodes,device=device)
+            # edges_idx = torch.where(nodes_idx[:,None]<nodes_idx[None,:])
+            # n_edges = edges_idx[0].size(0)
+            # edge_index_matrix[edges_idx] = torch.arange(edge_start_idxs[i],edge_start_idxs[i] + n_edges, device=device)
             
-        # # algorithm end
+            # # logits 并不是概率对应的值，其需要计算为softmax
+            # # scaffold['bond_one_hot']直接为概率编码，不需要再经过softmax了
+            # pred_ligand['logits_e'][edge_index_matrix[*scaffold['bonds']]] = torch.log(torch.clip(scaffold['bond_one_hot'],min=1e-8))
+            
+        # algorithm end
 
         if delta_eps_x is not None:
             pred_ligand['vel'] = pred_ligand['vel'] + delta_eps_x
@@ -1232,7 +1234,7 @@ class DrugFlow(pl.LightningModule):
 
         return out_ligand, out_pocket
 
-    def init_ligand(self, num_nodes_lig, pocket):
+    def init_ligand(self, num_nodes_lig, pocket, scaffold=None):
         device = pocket['x'].device
 
         n_samples = len(pocket['size'])
@@ -1249,6 +1251,11 @@ class DrugFlow(pl.LightningModule):
         z0_x = self.module_x.sample_z0(pocket_com, lig_mask)
         z0_h = self.module_h.sample_z0(lig_mask)
         z0_e = self.module_e.sample_z0(lig_edge_mask)
+
+        if scaffold:
+            scaffold_com = scaffold['x'] - scaffold['x'].mean(dim=0)
+            scaffold_com = scaffold_com / 2.7
+        
 
         return TensorDict(**{
             'x': z0_x, 'h': z0_h, 'e': z0_e, 'mask': lig_mask,
@@ -1349,7 +1356,7 @@ class DrugFlow(pl.LightningModule):
 
         # Sample from prior
         if pocket['x'].numel() > 0:
-            ligand = self.init_ligand(num_nodes, pocket)
+            ligand = self.init_ligand(num_nodes, pocket, scaffold_ligand)
         else:
             ligand = self.init_ligand(num_nodes, _ligand)
         pocket = self.init_pocket(pocket)
