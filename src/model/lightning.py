@@ -127,7 +127,8 @@ class DrugFlow(pl.LightningModule):
 
         # Training parameters
         self.datadir = train_params.datadir
-        self.geom_datadir = train_params.geom_datadir
+        if 'geom_datadir' in train_params:
+            self.geom_datadir = train_params.geom_datadir
         
         self.receptor_dir = train_params.datadir
         self.batch_size = train_params.batch_size
