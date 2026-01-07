@@ -753,6 +753,7 @@ def center_data(ligand, pocket):
         r_pocket = pocket.copy()
         pocket_com = r_pocket.center()
     else:
+        r_pocket = pocket
         pocket_com = scatter_mean(ligand['x'], ligand['mask'], dim=0)
 
     r_ligand = ligand.copy()
