@@ -741,12 +741,24 @@ def encode_residues(biopython_residues, type_encoder, level='atom',
 
 def center_data(ligand, pocket):
     if pocket['x'].numel() > 0:
-        pocket_com = pocket.center()
+        # pocket_com = pocket.center()
+        # 该函数具有严重缺陷，其默认修改自身得操作不符合开发模式
+        # 本函数必须修改为无副作用的函数，即计算pocket_com，获得新的pocket值得过程必须分开进行
+        # 不能修改pocket.center的成员函数，该函数可能有其他应用
+        # pocket_com = []
+        # for i in torch.unique(pocket['mask']):
+        #     com = pocket['x'][pocket['mask'] == i].mean(dim=0)
+        #     pocket_com.append(com)
+        # pocket_com = torch.stack(pocket_com, dim=0)
+        r_pocket = pocket.copy()
+        pocket_com = r_pocket.center()
     else:
         pocket_com = scatter_mean(ligand['x'], ligand['mask'], dim=0)
 
-    ligand['x'] = ligand['x'] - pocket_com[ligand['mask']]
-    return ligand, pocket
+    r_ligand = ligand.copy()
+    r_ligand['x'] = ligand['x'] - pocket_com[ligand['mask']]
+    
+    return r_ligand, r_pocket
 
 
 def get_bb_transform(n_xyz, ca_xyz, c_xyz):

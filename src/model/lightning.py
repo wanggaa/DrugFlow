@@ -993,43 +993,43 @@ class DrugFlow(pl.LightningModule):
         #     pred_ligand['vel'][idx:idx+n_atoms] = vel
         # # algorithm end
 
-        # jwang test algorithm2: change nearest atoms' velocities to scaffold ones
-        # need parameter scaffold: dict with 'x' and 'num_nodes'
-        # algorithm start
-        node_start_idxs = []
-        if scaffold:
-            num_nodes = torch.tensor(scaffold['num_nodes'])
-            node_start_idxs = torch.cumsum(num_nodes,dim=0) - num_nodes
-            num_edges = (num_nodes ** 2 - num_nodes)//2
-            edge_start_idxs = torch.cumsum(num_edges,dim=0) - num_edges
-            n_scaffold_atoms = scaffold['x'].size(0)
-            scaffold_x = (scaffold['x'] - scaffold['x'].mean(dim=0,keepdim=True)) / self.module_x.scale
+        # # jwang test algorithm2: change atoms' velocities to scaffold ones
+        # # need parameter scaffold: dict with 'x' and 'num_nodes'
+        # # algorithm start
+        # node_start_idxs = []
+        # if scaffold:
+        #     num_nodes = torch.tensor(scaffold['num_nodes'])
+        #     node_start_idxs = torch.cumsum(num_nodes,dim=0) - num_nodes
+        #     num_edges = (num_nodes ** 2 - num_nodes)//2
+        #     edge_start_idxs = torch.cumsum(num_edges,dim=0) - num_edges
+        #     n_scaffold_atoms = scaffold['x'].size(0)
+        #     # scaffold_x = (scaffold['x'] - scaffold['x'].mean(dim=0,keepdim=True)) / self.module_x.scale
+        #     scaffold_x = scaffold['x'] / self.module_x.scale
+                        
+        # for i,idx in enumerate(node_start_idxs):
+        #     # # nearest ones
+        #     # cost_matrix = scaffold_x[:,None,:] - zs_ligand['x'][idx:idx+num_nodes[i]][None,:,:]
+        #     # cost_matrix = cost_matrix.norm(dim=-1).detach().cpu()
+        #     # row_ind, col_ind = linear_sum_assignment(cost_matrix)
+        #     # # assign atom coordinates
             
-        for i,idx in enumerate(node_start_idxs):
-            # # nearest ones
-            # cost_matrix = scaffold_x[:,None,:] - zs_ligand['x'][idx:idx+num_nodes[i]][None,:,:]
-            # cost_matrix = cost_matrix.norm(dim=-1).detach().cpu()
-            # row_ind, col_ind = linear_sum_assignment(cost_matrix)
-            # # assign atom coordinates
+        #     # pred_ligand['vel'][idx:idx+n_scaffold_atoms] = scaffold_x
             
-            pred_ligand['vel'][idx:idx+n_scaffold_atoms] = scaffold_x
+        #     # assign atom types
+        #     pred_ligand['logits_h'][idx:idx+n_scaffold_atoms] = torch.log(torch.clip(scaffold['one_hot'],min=1e-8))
             
-            # assign atom types
-            pred_ligand['logits_h'][idx:idx+n_scaffold_atoms] = torch.log(torch.clip(scaffold['one_hot'],min=1e-8))
+        #     # assign edge types
+        #     n_nodes = num_nodes[i]
+        #     edge_index_matrix = torch.zeros((n_nodes,n_nodes),dtype=torch.long,device=device)
+        #     nodes_idx = torch.arange(n_nodes,device=device)
+        #     edges_idx = torch.where(nodes_idx[:,None]<nodes_idx[None,:])
+        #     n_edges = edges_idx[0].size(0)
+        #     edge_index_matrix[edges_idx] = torch.arange(edge_start_idxs[i],edge_start_idxs[i] + n_edges, device=device)
             
-            # # assign edge types
-            # n_nodes = num_nodes[i]
-            # edge_index_matrix = torch.zeros((n_nodes,n_nodes),dtype=torch.long,device=device)
-            # nodes_idx = torch.arange(n_nodes,device=device)
-            # edges_idx = torch.where(nodes_idx[:,None]<nodes_idx[None,:])
-            # n_edges = edges_idx[0].size(0)
-            # edge_index_matrix[edges_idx] = torch.arange(edge_start_idxs[i],edge_start_idxs[i] + n_edges, device=device)
-            
-            # # logits 并不是概率对应的值，其需要计算为softmax
-            # # scaffold['bond_one_hot']直接为概率编码，不需要再经过softmax了
-            # pred_ligand['logits_e'][edge_index_matrix[*scaffold['bonds']]] = torch.log(torch.clip(scaffold['bond_one_hot'],min=1e-8))
-            
-        # algorithm end
+        #     # logits 并不是概率对应的值，其需要计算为softmax
+        #     # scaffold['bond_one_hot']直接为概率编码，不需要再经过softmax了
+        #     pred_ligand['logits_e'][edge_index_matrix[*scaffold['bonds']]] = torch.log(torch.clip(scaffold['bond_one_hot'],min=1e-8))
+        # # algorithm end
 
         if delta_eps_x is not None:
             pred_ligand['vel'] = pred_ligand['vel'] + delta_eps_x
@@ -1097,8 +1097,8 @@ class DrugFlow(pl.LightningModule):
             'entropy_h': torch.zeros(len(ligand['mask']), device=device)
         } if self.predict_confidence else None
         
-        # jwang test algorithm1: recompute generate velocities based on scaffold
-        # algorithm start
+        # # jwang test algorithm1: recompute generate velocities based on scaffold
+        # # algorithm start
         # gt_vel_batch = {}
         # if scaffold is not None:
         #     num_nodes = scaffold['num_nodes']
@@ -1109,8 +1109,8 @@ class DrugFlow(pl.LightningModule):
         #         gt_vel = gt_vel / self.module_x.scale
         #         gt_vel_batch[idx] = gt_vel
         #         pred_ligand['logits_h'][idx:idx+n_atoms] = scaffold['one_hot']
-        # print('working here')
-        # algorithm end
+        # # print('working here')
+        # # algorithm end
         
         # jwang test algorithm3、4: REPAINT++
         # 需要保存原始噪声，方便后续进行重复加噪行为。
@@ -1121,6 +1121,7 @@ class DrugFlow(pl.LightningModule):
             num_nodes = scaffold['num_nodes']
             start_idxs = torch.tensor([0] + torch.cumsum(num_nodes,dim=0).tolist()[:-1])
             n_atoms = scaffold['x'].size(0)            
+            scaffold['x'] = scaffold['x'] - scaffold['x'].mean(dim=0,keepdim=True)
             
         # algorithm end
         
@@ -1150,67 +1151,67 @@ class DrugFlow(pl.LightningModule):
             else:
                 delta_eps_lig = None
 
-            # # jwang test algorithm3: REPAINT++
-            # # jwang test algorithm4: REPAINT++ with nearest scaffold atoms
-            # # algorithm start
-            # curr_t = t_array.mean()
-            # if scaffold is not None and curr_t != 0:
-            #     for _ in range(10): # iteration 10 times
-            #         # compute z_t-1 from z_t
-            #         ligand, pocket = self.sample_zt_given_zs(
-            #             ligand, pocket, t_array, t_array + delta_t, delta_eps_lig, cumulative_uncertainty, scaffold=scaffold)
+            # jwang test algorithm3: REPAINT++
+            # jwang test algorithm4: REPAINT++ with nearest scaffold atoms
+            # algorithm start
+            curr_t = t_array.mean()
+            if scaffold is not None and curr_t != 0:
+                for _ in range(10): # iteration 10 times
+                    # compute z_t-1 from z_t
+                    ligand, pocket = self.sample_zt_given_zs(
+                        ligand, pocket, t_array, t_array + delta_t, delta_eps_lig, cumulative_uncertainty, scaffold=scaffold)
                     
-            #         # mix scaffold and noise stucture in z_t-1
-            #         # use hungarian algorithm to find nearest atoms
-            #         cur_n_bonds = 0
-            #         for node_iter,idx in enumerate(start_idxs):
+                    # mix scaffold and noise stucture in z_t-1
+                    # use hungarian algorithm to find nearest atoms
+                    cur_n_bonds = 0
+                    for node_iter,idx in enumerate(start_idxs):
                         
-            #             # cost_matrix = scaffold['x'][:,None,:] - ligand['x'][idx:idx + num_nodes[node_iter]][None,:,:]
-            #             # cost_matrix = cost_matrix.norm(dim=-1).detach().cpu()
-            #             # row_ind, col_ind = linear_sum_assignment(cost_matrix) # row_ind is sorted
-            #             # row_ind = torch.tensor(row_ind,device=device)
-            #             # col_ind = torch.tensor(col_ind,device=device)
+                        # cost_matrix = scaffold['x'][:,None,:] - ligand['x'][idx:idx + num_nodes[node_iter]][None,:,:]
+                        # cost_matrix = cost_matrix.norm(dim=-1).detach().cpu()
+                        # row_ind, col_ind = linear_sum_assignment(cost_matrix) # row_ind is sorted
+                        # row_ind = torch.tensor(row_ind,device=device)
+                        # col_ind = torch.tensor(col_ind,device=device)
                         
-            #             # ligand['x'][idx+col_ind] = scaffold['x']
-            #             # ligand['h'][idx+col_ind] = scaffold['one_hot']
-            #             ligand['x'][idx:idx+n_atoms] = scaffold['x']
-            #             ligand['h'][idx:idx+n_atoms] = scaffold['one_hot']
-            #             # build index matrix for ligand bonds
-            #             n_nodes = num_nodes[node_iter]
-            #             edge_index_matrix = torch.zeros((n_nodes,n_nodes),dtype=torch.long,device=device)
-            #             nodes_idx = torch.arange(n_nodes,device=device)
-            #             edges_idx = torch.where(nodes_idx[:,None]<nodes_idx[None,:])
-            #             n_edges = edges_idx[0].size(0)
-            #             edge_index_matrix[edges_idx] = torch.arange(cur_n_bonds,cur_n_bonds + n_edges, device=device)
-            #             cur_n_bonds += n_edges
+                        # ligand['x'][idx+col_ind] = scaffold['x']
+                        # ligand['h'][idx+col_ind] = scaffold['one_hot']
+                        # ligand['x'][idx:idx+n_atoms] = scaffold['x']
+                        ligand['h'][idx:idx+n_atoms] = scaffold['one_hot']
+                        # build index matrix for ligand bonds
+                        n_nodes = num_nodes[node_iter]
+                        edge_index_matrix = torch.zeros((n_nodes,n_nodes),dtype=torch.long,device=device)
+                        nodes_idx = torch.arange(n_nodes,device=device)
+                        edges_idx = torch.where(nodes_idx[:,None]<nodes_idx[None,:])
+                        n_edges = edges_idx[0].size(0)
+                        edge_index_matrix[edges_idx] = torch.arange(cur_n_bonds,cur_n_bonds + n_edges, device=device)
+                        cur_n_bonds += n_edges
                         
-            #             # assign bonds and bond types
-            #             assert scaffold['bonds'].size(0) == 2 and scaffold['bonds'].ndim == 2
-            #             # ligand['e'][edge_index_matrix[*col_ind[scaffold['bonds']]]] = scaffold['bond_one_hot']
-            #             ligand['e'][edge_index_matrix[*scaffold['bonds']]] = scaffold['bond_one_hot']
+                        # assign bonds and bond types
+                        assert scaffold['bonds'].size(0) == 2 and scaffold['bonds'].ndim == 2
+                        # ligand['e'][edge_index_matrix[*col_ind[scaffold['bonds']]]] = scaffold['bond_one_hot']
+                        ligand['e'][edge_index_matrix[*scaffold['bonds']]] = scaffold['bond_one_hot']
                         
-            #         # just assignment to first nodes
-            #         # nodes_scatter_index = torch.arange(n_atoms)[None,:] + torch.tensor(start_idxs)[:,None]
-            #         # nodes_scatter_index = nodes_scatter_index.to(device)
-            #         # ligand['x'].scatter_(dim=0,index=nodes_scatter_index.flatten()[:,None],
-            #         #                      src=torch.broadcast_to(scaffold['x'],(n_samples,n_atoms,-1)).reshape(n_samples*n_atoms,-1))
-            #         # ligand['h'].scatter_(dim=0,index=nodes_scatter_index.flatten()[:,None],
-            #         #                      src=torch.broadcast_to(scaffold['one_hot'],(n_samples,n_atoms,-1)).reshape(n_samples*n_atoms,-1))
+                    # just assignment to first nodes
+                    # nodes_scatter_index = torch.arange(n_atoms)[None,:] + torch.tensor(start_idxs)[:,None]
+                    # nodes_scatter_index = nodes_scatter_index.to(device)
+                    # ligand['x'].scatter_(dim=0,index=nodes_scatter_index.flatten()[:,None],
+                    #                      src=torch.broadcast_to(scaffold['x'],(n_samples,n_atoms,-1)).reshape(n_samples*n_atoms,-1))
+                    # ligand['h'].scatter_(dim=0,index=nodes_scatter_index.flatten()[:,None],
+                    #                      src=torch.broadcast_to(scaffold['one_hot'],(n_samples,n_atoms,-1)).reshape(n_samples*n_atoms,-1))
                     
-            #         # num_edges = (num_nodes**2 - num_nodes) // 2
-            #         # edges_start_idx = num_edges.cumsum(dim=0) - num_edges
-            #         # edges_scatter_index = 
+                    # num_edges = (num_nodes**2 - num_nodes) // 2
+                    # edges_start_idx = num_edges.cumsum(dim=0) - num_edges
+                    # edges_scatter_index = 
                     
-            #         # assign z_t from renoised z_t-1
-            #         curr_t_array = t_array / (t_array + delta_t)
-            #         ligand['x'] = self.module_x.sample_zt(ligand_z0['x'],ligand['x'],curr_t_array,ligand['mask'])
-            #         ligand['h'] = self.module_h.sample_zt(ligand_z0['h'],ligand['h'],curr_t_array,ligand['mask'])
-            #         ligand['e'] = self.module_e.sample_zt(ligand_z0['e'],ligand['e'],curr_t_array,ligand['edge_mask'])
+                    # assign z_t from renoised z_t-1
+                    curr_t_array = t_array / (t_array + delta_t)
+                    ligand['x'] = self.module_x.sample_zt(ligand_z0['x'],ligand['x'],curr_t_array,ligand['mask'])
+                    ligand['h'] = self.module_h.sample_zt(ligand_z0['h'],ligand['h'],curr_t_array,ligand['mask'])
+                    ligand['e'] = self.module_e.sample_zt(ligand_z0['e'],ligand['e'],curr_t_array,ligand['edge_mask'])
                     
-            # # debug:
-            # # if curr_t > 0.99:
-            # #     print('在这停顿！')
-            # # algorithm end
+            # debug:
+            # if curr_t > 0.99:
+            #     print('在这停顿！')
+            # algorithm end
             
             # debug here
             # jwang: 循环生成函数，这里是需要固定scaffold的
@@ -1237,7 +1238,7 @@ class DrugFlow(pl.LightningModule):
 
         return out_ligand, out_pocket
 
-    def init_ligand(self, num_nodes_lig, pocket, scaffold=None):
+    def init_ligand(self, num_nodes_lig, pocket):
         device = pocket['x'].device
 
         n_samples = len(pocket['size'])
@@ -1254,11 +1255,6 @@ class DrugFlow(pl.LightningModule):
         z0_x = self.module_x.sample_z0(pocket_com, lig_mask)
         z0_h = self.module_h.sample_z0(lig_mask)
         z0_e = self.module_e.sample_z0(lig_edge_mask)
-
-        if scaffold:
-            scaffold_com = scaffold['x'] - scaffold['x'].mean(dim=0)
-            scaffold_com = scaffold_com / 2.7
-        
 
         return TensorDict(**{
             'x': z0_x, 'h': z0_h, 'e': z0_e, 'mask': lig_mask,
@@ -1359,12 +1355,14 @@ class DrugFlow(pl.LightningModule):
 
         # Sample from prior
         if pocket['x'].numel() > 0:
-            ligand = self.init_ligand(num_nodes, pocket, scaffold_ligand)
+            ligand = self.init_ligand(num_nodes, pocket)
         else:
             ligand = self.init_ligand(num_nodes, _ligand)
         pocket = self.init_pocket(pocket)
-
-        ligand,pocket = center_data(ligand,pocket)
+        
+        if scaffold_ligand is not None:
+            scaffold_ligand, _ = center_data(scaffold_ligand, pocket)
+        ligand, pocket = center_data(ligand, pocket)
 
         # return prior samples
         if timesteps == 0:
@@ -1384,6 +1382,7 @@ class DrugFlow(pl.LightningModule):
             return rdmols, rdpockets, _ligand['name']
 
         # jwang: 关键生成函数
+        # scaffold_ligand['x'] = scaffold_ligand['x'] - scaffold_ligand['x'].mean(dim=0,keepdim=True)
         out_tensors_ligand, out_tensors_pocket = self.simulate(
             ligand, pocket, timesteps, 0.0, 1.0,
             guide_log_prob=guide_log_prob,
