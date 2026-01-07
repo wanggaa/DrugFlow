@@ -87,7 +87,7 @@ class ProcessedLigandPocketDataset(Dataset):
         
         if idx < self.ligand_pocket_size:
             data['ligand'] = {key: val[idx] for key, val in self.ligand_pocket_data['ligands'].items()}
-            data['ligand']['x'] = torch.tensor(random_rot.apply(data['ligand']['x']))
+            data['ligand']['x'] = torch.tensor(random_rot.apply(data['ligand']['x']),dtype=torch.float)
             
             data['pocket'] = {key: val[idx] for key, val in self.ligand_pocket_data['pockets'].items()}
             data['pocket']['x'] = torch.tensor(random_rot.apply(data['pocket']['x']),dtype=torch.float)
