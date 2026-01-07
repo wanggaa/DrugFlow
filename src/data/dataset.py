@@ -90,9 +90,9 @@ class ProcessedLigandPocketDataset(Dataset):
             data['ligand']['x'] = torch.tensor(random_rot.apply(data['ligand']['x']))
             
             data['pocket'] = {key: val[idx] for key, val in self.ligand_pocket_data['pockets'].items()}
-            data['pocket']['x'] = torch.tensor(random_rot.apply(data['pocket']['x']))
-            data['pocket']['v'] = torch.tensor(random_rot.apply(data['pocket']['v'].reshape(-1,3))).reshape(*data['pocket']['v'].shape)
-            data['pocket']['fixed_coord'] = torch.tensor(random_rot.apply(data['pocket']['fixed_coord'].reshape(-1,3))).reshape(*data['pocket']['fixed_coord'].shape)
+            data['pocket']['x'] = torch.tensor(random_rot.apply(data['pocket']['x']),dtype=torch.float)
+            data['pocket']['v'] = torch.tensor(random_rot.apply(data['pocket']['v'].reshape(-1,3)),dtype=torch.float).reshape(*data['pocket']['v'].shape)
+            data['pocket']['fixed_coord'] = torch.tensor(random_rot.apply(data['pocket']['fixed_coord'].reshape(-1,3)),dtype=torch.float).reshape(*data['pocket']['fixed_coord'].shape)
             
             
             try:
@@ -112,7 +112,7 @@ class ProcessedLigandPocketDataset(Dataset):
         else:
             idx = idx - self.ligand_pocket_size
             data['ligand'] = {key: val[idx] for key, val in self.ligand_data.items()}
-            data['ligand']['x'] = torch.tensor(random_rot.apply(data['ligand']['x']))
+            data['ligand']['x'] = torch.tensor(random_rot.apply(data['ligand']['x']),dtype=torch.float)
             
             data['pocket'] = {key: [] for key in self.pocket_keys}
             data['pocket']['is_existing'] = False
