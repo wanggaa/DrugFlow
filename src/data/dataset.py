@@ -19,6 +19,8 @@ from src.data.data_utils import prepare_ligand
 from collections import defaultdict
 from tqdm import tqdm
 
+from scipy.spatial.transform import Rotation
+
 class ProcessedLigandPocketDataset(Dataset):
     def __init__(self, pt_path, geom_path=None, ligand_transform=None, pocket_transform=None,
                  catch_errors=False):
@@ -80,8 +82,13 @@ class ProcessedLigandPocketDataset(Dataset):
     def __getitem__(self, idx):
         # idx = 100000 # for debug
         data = {}
+        random_rotquat = torch.randn(4)
+        random_rot = Rotation(random_rotquat)
+        
         if idx < self.ligand_pocket_size:
             data['ligand'] = {key: val[idx] for key, val in self.ligand_pocket_data['ligands'].items()}
+            data['ligand']['x'] = random_rot.apply(data['ligand']['x'])
+            
             data['pocket'] = {key: val[idx] for key, val in self.ligand_pocket_data['pockets'].items()}
             try:
                 if self.ligand_transform is not None:
@@ -100,6 +107,8 @@ class ProcessedLigandPocketDataset(Dataset):
         else:
             idx = idx - self.ligand_pocket_size
             data['ligand'] = {key: val[idx] for key, val in self.ligand_data.items()}
+            data['ligand']['x'] = random_rot.apply(data['ligand']['x'])
+            
             data['pocket'] = {key: [] for key in self.pocket_keys}
             data['pocket']['is_existing'] = False
             data['pocket']['mask'] = torch.tensor([])
