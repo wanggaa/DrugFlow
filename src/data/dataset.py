@@ -91,7 +91,7 @@ class ProcessedLigandPocketDataset(Dataset):
             
             data['pocket'] = {key: val[idx] for key, val in self.ligand_pocket_data['pockets'].items()}
             data['pocket']['x'] = torch.tensor(random_rot.apply(data['pocket']['x']))
-            data['pocket']['v'] = torch.tensor(random_rot.apply(data['pocket']['v']))
+            data['pocket']['v'] = torch.tensor(random_rot.apply(data['pocket']['v'].reshape(-1,3))).reshape(*data['pocket']['v'].shape)
             data['pocket']['fixed_coord'] = torch.tensor(random_rot.apply(data['pocket']['fixed_coord'].reshape(-1,3))).reshape(*data['pocket']['fixed_coord'].shape)
             
             
