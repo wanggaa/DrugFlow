@@ -45,6 +45,92 @@ aa_atom_mask_tensor = torch.tensor([aa_atom_mask[aa] for aa in aa_decoder])
 aa_atom_decoder = {aa: {v: k for k, v in aa_atom_index[aa].items()} for aa in aa_decoder}
 aa_atom_type_tensor = torch.tensor([[atom_encoder.get(aa_atom_decoder[aa].get(i, '-')[0], -42)
                                      for i in range(14)] for aa in aa_decoder])
+import torch
+
+
+def kabsch_torch(P, Q):
+    """
+    Computes the optimal rotation and translation to align two sets of points (P -> Q),
+    and their RMSD.
+    :param P: A Nx3 matrix of points
+    :param Q: A Nx3 matrix of points
+    :return: A tuple containing the optimal rotation matrix, the optimal
+             translation vector, and the RMSD.
+    """
+    assert P.shape == Q.shape, "Matrix dimensions must match"
+
+    # Compute centroids
+    centroid_P = torch.mean(P, dim=0)
+    centroid_Q = torch.mean(Q, dim=0)
+
+    # Optimal translation
+    t = centroid_Q - centroid_P
+
+    # Center the points
+    p = P - centroid_P
+    q = Q - centroid_Q
+
+    # Compute the covariance matrix
+    H = torch.matmul(p.transpose(0, 1), q)
+
+    # SVD
+    U, S, Vt = torch.linalg.svd(H)
+
+    # Validate right-handed coordinate system
+    if torch.det(torch.matmul(Vt.transpose(0, 1), U.transpose(0, 1))) < 0.0:
+        Vt[-1, :] *= -1.0
+
+    # Optimal rotation
+    R = torch.matmul(Vt.transpose(0, 1), U.transpose(0, 1))
+
+    # RMSD
+    rmsd = torch.sqrt(torch.sum(torch.square(torch.matmul(p, R.transpose(0, 1)) - q)) / P.shape[0])
+
+    return R, t, rmsd
+
+
+def kabsch_torch_batched(P, Q):
+    """
+    Computes the optimal rotation and translation to align two sets of points (P -> Q),
+    and their RMSD, in a batched manner.
+    :param P: A BxNx3 matrix of points
+    :param Q: A BxNx3 matrix of points
+    :return: A tuple containing the optimal rotation matrix, the optimal
+             translation vector, and the RMSD.
+    """
+    assert P.shape == Q.shape, "Matrix dimensions must match"
+
+    # Compute centroids
+    centroid_P = torch.mean(P, dim=1, keepdims=True)  # Bx1x3
+    centroid_Q = torch.mean(Q, dim=1, keepdims=True)  #
+
+    # Optimal translation
+    t = centroid_Q - centroid_P  # Bx1x3
+    t = t.squeeze(1)  # Bx3
+
+    # Center the points
+    p = P - centroid_P  # BxNx3
+    q = Q - centroid_Q  # BxNx3
+
+    # Compute the covariance matrix
+    H = torch.matmul(p.transpose(1, 2), q)  # Bx3x3
+
+    # SVD
+    U, S, Vt = torch.linalg.svd(H)  # Bx3x3
+
+    # Validate right-handed coordinate system
+    d = torch.det(torch.matmul(Vt.transpose(1, 2), U.transpose(1, 2)))  # B
+    flip = d < 0.0
+    if flip.any().item():
+        Vt[flip, -1, :] *= -1.0
+
+    # Optimal rotation
+    R = torch.matmul(Vt.transpose(1, 2), U.transpose(1, 2))
+
+    # RMSD
+    rmsd = torch.sqrt(torch.sum(torch.square(torch.matmul(p, R.transpose(1, 2)) - q), dim=(1, 2)) / P.shape[1])
+
+    return R, t, rmsd
 
 
 def set_default(namespace, key, default_val):
@@ -1154,59 +1240,67 @@ class DrugFlow(pl.LightningModule):
             # jwang test algorithm3: REPAINT++
             # jwang test algorithm4: REPAINT++ with nearest scaffold atoms
             # algorithm start
-            curr_t = t_array.mean()
-            if scaffold is not None and curr_t != 0:
-                for _ in range(10): # iteration 10 times
-                    # compute z_t-1 from z_t
-                    ligand, pocket = self.sample_zt_given_zs(
-                        ligand, pocket, t_array, t_array + delta_t, delta_eps_lig, cumulative_uncertainty, scaffold=scaffold)
+            # curr_t = t_array.mean()
+            # if scaffold is not None and curr_t != 0:
+            #     for _ in range(5): # iteration 10 times
+            #         # compute z_t-1 from z_t
+            #         ligand, pocket = self.sample_zt_given_zs(
+            #             ligand, pocket, t_array, t_array + delta_t, delta_eps_lig, cumulative_uncertainty, scaffold=scaffold)
                     
-                    # mix scaffold and noise stucture in z_t-1
-                    # use hungarian algorithm to find nearest atoms
-                    cur_n_bonds = 0
-                    for node_iter,idx in enumerate(start_idxs):
+            #         # mix scaffold and noise stucture in z_t-1
+            #         # use hungarian algorithm to find nearest atoms
+            #         cur_n_bonds = 0
+            #         for node_iter,idx in enumerate(start_idxs):
                         
-                        # cost_matrix = scaffold['x'][:,None,:] - ligand['x'][idx:idx + num_nodes[node_iter]][None,:,:]
-                        # cost_matrix = cost_matrix.norm(dim=-1).detach().cpu()
-                        # row_ind, col_ind = linear_sum_assignment(cost_matrix) # row_ind is sorted
-                        # row_ind = torch.tensor(row_ind,device=device)
-                        # col_ind = torch.tensor(col_ind,device=device)
+            #             # cost_matrix = scaffold['x'][:,None,:] - ligand['x'][idx:idx + num_nodes[node_iter]][None,:,:]
+            #             # cost_matrix = cost_matrix.norm(dim=-1).detach().cpu()
+            #             # row_ind, col_ind = linear_sum_assignment(cost_matrix) # row_ind is sorted
+            #             # row_ind = torch.tensor(row_ind,device=device)
+            #             # col_ind = torch.tensor(col_ind,device=device)
                         
-                        # ligand['x'][idx+col_ind] = scaffold['x']
-                        # ligand['h'][idx+col_ind] = scaffold['one_hot']
-                        # ligand['x'][idx:idx+n_atoms] = scaffold['x']
-                        ligand['h'][idx:idx+n_atoms] = scaffold['one_hot']
-                        # build index matrix for ligand bonds
-                        n_nodes = num_nodes[node_iter]
-                        edge_index_matrix = torch.zeros((n_nodes,n_nodes),dtype=torch.long,device=device)
-                        nodes_idx = torch.arange(n_nodes,device=device)
-                        edges_idx = torch.where(nodes_idx[:,None]<nodes_idx[None,:])
-                        n_edges = edges_idx[0].size(0)
-                        edge_index_matrix[edges_idx] = torch.arange(cur_n_bonds,cur_n_bonds + n_edges, device=device)
-                        cur_n_bonds += n_edges
+            #             # ligand['x'][idx+col_ind] = scaffold['x']
+            #             # ligand['h'][idx+col_ind] = scaffold['one_hot']
+            #             # ligand['x'][idx:idx+n_atoms] = scaffold['x']
+            #             # R,t,rmsd = kabsch_torch(
+            #             #     scaffold['x'],
+            #             #     ligand['x'][idx:idx + n_atoms],
+            #             # )
+            #             # aligned_scaffold_x = scaffold['x'] @ R.T + t[None]
+            #             # ligand['x'][idx:idx + n_atoms] = aligned_scaffold_x
+            #             pass
                         
-                        # assign bonds and bond types
-                        assert scaffold['bonds'].size(0) == 2 and scaffold['bonds'].ndim == 2
-                        # ligand['e'][edge_index_matrix[*col_ind[scaffold['bonds']]]] = scaffold['bond_one_hot']
-                        ligand['e'][edge_index_matrix[*scaffold['bonds']]] = scaffold['bond_one_hot']
+            #             # ligand['h'][idx:idx+n_atoms] = scaffold['one_hot']
+            #             # # build index matrix for ligand bonds
+            #             # n_nodes = num_nodes[node_iter]
+            #             # edge_index_matrix = torch.zeros((n_nodes,n_nodes),dtype=torch.long,device=device)
+            #             # nodes_idx = torch.arange(n_nodes,device=device)
+            #             # edges_idx = torch.where(nodes_idx[:,None]<nodes_idx[None,:])
+            #             # n_edges = edges_idx[0].size(0)
+            #             # edge_index_matrix[edges_idx] = torch.arange(cur_n_bonds,cur_n_bonds + n_edges, device=device)
+            #             # cur_n_bonds += n_edges
                         
-                    # just assignment to first nodes
-                    # nodes_scatter_index = torch.arange(n_atoms)[None,:] + torch.tensor(start_idxs)[:,None]
-                    # nodes_scatter_index = nodes_scatter_index.to(device)
-                    # ligand['x'].scatter_(dim=0,index=nodes_scatter_index.flatten()[:,None],
-                    #                      src=torch.broadcast_to(scaffold['x'],(n_samples,n_atoms,-1)).reshape(n_samples*n_atoms,-1))
-                    # ligand['h'].scatter_(dim=0,index=nodes_scatter_index.flatten()[:,None],
-                    #                      src=torch.broadcast_to(scaffold['one_hot'],(n_samples,n_atoms,-1)).reshape(n_samples*n_atoms,-1))
+            #             # # assign bonds and bond types
+            #             # assert scaffold['bonds'].size(0) == 2 and scaffold['bonds'].ndim == 2
+            #             # # ligand['e'][edge_index_matrix[*col_ind[scaffold['bonds']]]] = scaffold['bond_one_hot']
+            #             # ligand['e'][edge_index_matrix[*scaffold['bonds']]] = scaffold['bond_one_hot']
+                        
+            #         # just assignment to first nodes
+            #         # nodes_scatter_index = torch.arange(n_atoms)[None,:] + torch.tensor(start_idxs)[:,None]
+            #         # nodes_scatter_index = nodes_scatter_index.to(device)
+            #         # ligand['x'].scatter_(dim=0,index=nodes_scatter_index.flatten()[:,None],
+            #         #                      src=torch.broadcast_to(scaffold['x'],(n_samples,n_atoms,-1)).reshape(n_samples*n_atoms,-1))
+            #         # ligand['h'].scatter_(dim=0,index=nodes_scatter_index.flatten()[:,None],
+            #         #                      src=torch.broadcast_to(scaffold['one_hot'],(n_samples,n_atoms,-1)).reshape(n_samples*n_atoms,-1))
                     
-                    # num_edges = (num_nodes**2 - num_nodes) // 2
-                    # edges_start_idx = num_edges.cumsum(dim=0) - num_edges
-                    # edges_scatter_index = 
+            #         # num_edges = (num_nodes**2 - num_nodes) // 2
+            #         # edges_start_idx = num_edges.cumsum(dim=0) - num_edges
+            #         # edges_scatter_index = 
                     
-                    # assign z_t from renoised z_t-1
-                    curr_t_array = t_array / (t_array + delta_t)
-                    ligand['x'] = self.module_x.sample_zt(ligand_z0['x'],ligand['x'],curr_t_array,ligand['mask'])
-                    ligand['h'] = self.module_h.sample_zt(ligand_z0['h'],ligand['h'],curr_t_array,ligand['mask'])
-                    ligand['e'] = self.module_e.sample_zt(ligand_z0['e'],ligand['e'],curr_t_array,ligand['edge_mask'])
+            #         # assign z_t from renoised z_t-1
+            #         curr_t_array = t_array / (t_array + delta_t)
+            #         ligand['x'] = self.module_x.sample_zt(ligand_z0['x'],ligand['x'],curr_t_array,ligand['mask'])
+            #         ligand['h'] = self.module_h.sample_zt(ligand_z0['h'],ligand['h'],curr_t_array,ligand['mask'])
+            #         ligand['e'] = self.module_e.sample_zt(ligand_z0['e'],ligand['e'],curr_t_array,ligand['edge_mask'])
                     
             # debug:
             # if curr_t > 0.99:

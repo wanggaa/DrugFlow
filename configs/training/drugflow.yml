@@ -10,7 +10,7 @@ train_params:
   geom_datadir: /root/workspace/jwang/datasets/GEOM
   enable_progress_bar: True
   num_sanity_val_steps: 0
-  batch_size: 64
+  batch_size: 16
   accumulate_grad_batches: 2
   lr: 5.0e-4
   n_epochs: 1000
@@ -22,7 +22,7 @@ train_params:
   sharded_dataset: False
 
 wandb_params:
-  mode: disabled  # disabled, offline, online
+  mode: online  # disabled, offline, online
   entity:
   group: crossdocked
 

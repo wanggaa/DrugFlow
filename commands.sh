@@ -5,20 +5,20 @@ python -m debugpy --wait-for-client --listen 5678 src/generate.py \
   --checkpoint checkpoints/drugflow.ckpt \
   --output examples/kras/samples.sdf
 
-python src/generate.py \
-  --checkpoint  checkpoints/epoch=729-step=2300230.ckpt \
-  --protein examples/7RPZ/7RPZ_protein.pdb \
-  --ref_ligand examples/7RPZ/7RPZ_ligand.sdf \
-  --output examples/7RPZ/free_sample.sdf \
-  --n_samples 96 \
+python -m debugpy --wait-for-client --listen 5678 src/generate.py \
+  --checkpoint  checkpoints/epoch=225-step=712126.ckpt \
+  --protein examples/debug/pdk1_protein.pdb \
+  --ref_ligand examples/debug/7RPZ_ligand.sdf \
+  --output examples/debug/inpaint_sample.sdf \
+  --n_samples 32 \
   --batch_size 32
 
-python -m debugpy --wait-for-client --listen 5678 src/inpaint.py \
-  --checkpoint checkpoints/epoch=729-step=2300230.ckpt \
-  --protein examples/7RPZ/7RPZ_protein.pdb \
-  --ref_ligand examples/7RPZ/7RPZ_ligand.sdf \
-  --output examples/7RPZ/inpaint_sample.sdf \
-  --scaffold_ligand examples/7RPZ/7RPZ_scaffold.sdf \
+python src/inpaint.py \
+  --checkpoint checkpoints/epoch=225-step=712126.ckpt \
+  --protein examples/debug/pdk1_protein.pdb \
+  --ref_ligand examples/debug/7RPZ_ligand(1).sdf \
+  --output examples/debug/inpaint_sample.sdf \
+  --scaffold_ligand examples/debug/7RPZ_scaffold.sdf \
   --n_samples 32 \
   --batch_size 32
 
