@@ -1298,7 +1298,7 @@ class DrugFlow(pl.LightningModule):
                     
             #         # assign z_t from renoised z_t-1
             #         curr_t_array = t_array / (t_array + delta_t)
-            #         ligand['x'] = self.module_x.sample_zt(ligand_z0['x'],ligand['x'],curr_t_array,ligand['mask'])
+                    # ligand['x'] = self.module_x.sample_zt(ligand_z0['x'],ligand['x'],curr_t_array,ligand['mask'])
             #         ligand['h'] = self.module_h.sample_zt(ligand_z0['h'],ligand['h'],curr_t_array,ligand['mask'])
             #         ligand['e'] = self.module_e.sample_zt(ligand_z0['e'],ligand['e'],curr_t_array,ligand['edge_mask'])
                     

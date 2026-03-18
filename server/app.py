@@ -134,13 +134,13 @@ async def send_callback(callback_config: Dict[str, Any], task_id: str, status: s
         print(f"[CALLBACK ERROR] 回调配置为空: task_id={task_id}")
         return
     
-    # 用户提供的格式: {"callback_config": {"callback_url": "...", "callback_method": "...", "callback_headers": {...}}}
+    # 用户提供的格式: {"callback_url": "...", "callback_method": "...", "callback_headers": {...}}
     # 检查是否有callback_config键
-    if "callback_config" not in callback_config:
+    if not callback_config:
         print(f"[CALLBACK ERROR] 回调配置格式错误，缺少callback_config键: task_id={task_id}, config={callback_config}")
         return
     
-    config = callback_config["callback_config"]
+    config = callback_config
     url = config.get("callback_url")
     if not url:
         print(f"[CALLBACK ERROR] 回调配置中没有callback_url: task_id={task_id}, config={config}")
@@ -300,10 +300,10 @@ async def generate_molecules(
         try:
             callback_config_dict = json.loads(callback_config)
             # 验证必要的字段格式
-            if not isinstance(callback_config_dict, dict) or "callback_config" not in callback_config_dict:
+            if not isinstance(callback_config_dict, dict):
                 raise HTTPException(status_code=400, detail="callback_config 必须包含 'callback_config' 键")
             
-            inner_config = callback_config_dict["callback_config"]
+            inner_config = callback_config_dict
             if not isinstance(inner_config, dict) or "callback_url" not in inner_config:
                 raise HTTPException(status_code=400, detail="callback_config.callback_config 必须包含 'callback_url' 字段")
         except json.JSONDecodeError as e:
@@ -403,9 +403,13 @@ async def download_samples_smi(task_id: str):
         print(f"[API ERROR] 生成结果不存在: {task_id}")
         raise HTTPException(status_code=404, detail="生成结果尚未完成或不存在")
     
-    print(f"[FILE TRANSFER] 转换samples.sdf: task_id={task_id}")
-    convert_sdf_to_smiles(samples_sdf_file,samples_smi_file)
-    
+    if not samples_smi_file.exists():
+        print(f"[FILE TRANSFER] 转换samples.sdf: task_id={task_id}")
+        convert_sdf_to_smiles(samples_sdf_file,samples_smi_file)
+        if not samples_smi_file.exists():
+            print(f"FAILED: [FILE TRANSFER] 转换samples.sdf: task_id={task_id}")
+            raise HTTPException(status_code=404, detail="格式转换失败，生成结果未找到")
+        
     print(f"[FILE DOWNLOAD] 下载samples.smi: task_id={task_id}")
     return FileResponse(
         path=samples_smi_file,
